@@ -28,8 +28,16 @@ const TradingChart = ({ symbol, height = 500 }: TradingChartProps) => {
     }
 
     return () => {
-      if (widgetRef.current) {
-        widgetRef.current.remove();
+      if (widgetRef.current && typeof widgetRef.current.remove === 'function') {
+        try {
+          widgetRef.current.remove();
+        } catch (error) {
+          console.warn('Error removing TradingView widget:', error);
+        }
+      }
+      // Clear the container manually as fallback
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
       }
     };
   }, [symbol]);
