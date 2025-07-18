@@ -45,9 +45,18 @@ const TradingChart = ({ symbol, height = 500 }: TradingChartProps) => {
   const createWidget = () => {
     if (!containerRef.current || !window.TradingView) return;
 
-    // Clear previous widget
-    if (widgetRef.current) {
-      widgetRef.current.remove();
+    // Clear previous widget safely
+    if (widgetRef.current && typeof widgetRef.current.remove === 'function') {
+      try {
+        widgetRef.current.remove();
+      } catch (error) {
+        console.warn('Error removing previous TradingView widget:', error);
+      }
+    }
+    
+    // Clear container manually as fallback
+    if (containerRef.current) {
+      containerRef.current.innerHTML = '';
     }
 
     // Map symbols to TradingView format
