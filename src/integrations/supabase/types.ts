@@ -14,7 +14,168 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      user_portfolio: {
+        Row: {
+          available_balance: number
+          created_at: string
+          current_value: number
+          day_pnl: number
+          id: string
+          invested_amount: number
+          losing_trades: number
+          max_drawdown: number
+          roi_percentage: number
+          total_capital: number
+          total_pnl: number
+          total_trades: number
+          updated_at: string
+          user_id: string
+          winning_trades: number
+        }
+        Insert: {
+          available_balance?: number
+          created_at?: string
+          current_value?: number
+          day_pnl?: number
+          id?: string
+          invested_amount?: number
+          losing_trades?: number
+          max_drawdown?: number
+          roi_percentage?: number
+          total_capital?: number
+          total_pnl?: number
+          total_trades?: number
+          updated_at?: string
+          user_id: string
+          winning_trades?: number
+        }
+        Update: {
+          available_balance?: number
+          created_at?: string
+          current_value?: number
+          day_pnl?: number
+          id?: string
+          invested_amount?: number
+          losing_trades?: number
+          max_drawdown?: number
+          roi_percentage?: number
+          total_capital?: number
+          total_pnl?: number
+          total_trades?: number
+          updated_at?: string
+          user_id?: string
+          winning_trades?: number
+        }
+        Relationships: []
+      }
+      user_positions: {
+        Row: {
+          average_price: number
+          created_at: string
+          current_price: number
+          current_value: number
+          day_pnl: number
+          id: string
+          invested_amount: number
+          symbol: string
+          total_quantity: number
+          unrealized_pnl: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_price: number
+          created_at?: string
+          current_price: number
+          current_value: number
+          day_pnl?: number
+          id?: string
+          invested_amount: number
+          symbol: string
+          total_quantity?: number
+          unrealized_pnl?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_price?: number
+          created_at?: string
+          current_price?: number
+          current_value?: number
+          day_pnl?: number
+          id?: string
+          invested_amount?: number
+          symbol?: string
+          total_quantity?: number
+          unrealized_pnl?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_trades: {
+        Row: {
+          amount: number
+          created_at: string
+          entry_price: number
+          entry_time: string
+          exit_price: number | null
+          exit_time: string | null
+          id: string
+          order_type: Database["public"]["Enums"]["order_type"]
+          quantity: number
+          realized_pnl: number | null
+          status: Database["public"]["Enums"]["trade_status"]
+          stop_loss: number | null
+          symbol: string
+          take_profit: number | null
+          trade_type: Database["public"]["Enums"]["trade_type"]
+          unrealized_pnl: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          entry_price: number
+          entry_time?: string
+          exit_price?: number | null
+          exit_time?: string | null
+          id?: string
+          order_type: Database["public"]["Enums"]["order_type"]
+          quantity: number
+          realized_pnl?: number | null
+          status?: Database["public"]["Enums"]["trade_status"]
+          stop_loss?: number | null
+          symbol: string
+          take_profit?: number | null
+          trade_type: Database["public"]["Enums"]["trade_type"]
+          unrealized_pnl?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          entry_price?: number
+          entry_time?: string
+          exit_price?: number | null
+          exit_time?: string | null
+          id?: string
+          order_type?: Database["public"]["Enums"]["order_type"]
+          quantity?: number
+          realized_pnl?: number | null
+          status?: Database["public"]["Enums"]["trade_status"]
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
+          trade_type?: Database["public"]["Enums"]["trade_type"]
+          unrealized_pnl?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +184,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      order_type: "MARKET" | "LIMIT" | "STOP_LOSS" | "TAKE_PROFIT"
+      trade_status: "OPEN" | "CLOSED" | "CANCELLED"
+      trade_type: "BUY" | "SELL"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +313,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      order_type: ["MARKET", "LIMIT", "STOP_LOSS", "TAKE_PROFIT"],
+      trade_status: ["OPEN", "CLOSED", "CANCELLED"],
+      trade_type: ["BUY", "SELL"],
+    },
   },
 } as const

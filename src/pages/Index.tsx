@@ -6,6 +6,7 @@ import StrategyManager from '@/components/StrategyManager';
 import SignalHistory from '@/components/SignalHistory';
 import StrategyTester from '@/components/StrategyTester';
 import MarketStats from "@/components/MarketStats";
+import { VirtualTrading } from '@/components/VirtualTrading';
 
 const Index = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('NIFTY50');
@@ -32,6 +33,9 @@ const Index = () => {
             <TabsTrigger value="tester" className="data-[state=active]:bg-primary data-[state=active]:text-white">
               Strategy Tester
             </TabsTrigger>
+            <TabsTrigger value="trading" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+              Virtual Trading
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="charts" className="space-y-6">
@@ -52,6 +56,10 @@ const Index = () => {
 
           <TabsContent value="tester">
             <StrategyTester />
+          </TabsContent>
+
+          <TabsContent value="trading">
+            <VirtualTrading selectedSymbol={selectedSymbol} currentPrice={2500} />
           </TabsContent>
         </Tabs>
       </div>
