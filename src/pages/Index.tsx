@@ -9,14 +9,14 @@ import MarketStats from "@/components/MarketStats";
 import { VirtualTrading } from '@/components/VirtualTrading';
 
 const Index = () => {
-  const [selectedSymbol, setSelectedSymbol] = useState('NIFTY50');
+  const [selectedSymbol, setSelectedSymbol] = useState('BINANCE:BTCUSDT');
 
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 text-foreground">Indian Stock Market Trading Platform</h1>
-          <p className="text-muted-foreground">Live charts, strategy alerts, and backtesting for Indian markets</p>
+          <h1 className="text-4xl font-bold mb-2 text-foreground">Global Trading Platform</h1>
+          <p className="text-muted-foreground">Live charts, strategy alerts, and backtesting for crypto, forex, commodities, and global markets</p>
         </header>
 
         <Tabs defaultValue="charts" className="space-y-6">
@@ -59,7 +59,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="trading">
-            <VirtualTrading selectedSymbol={selectedSymbol} currentPrice={2500} />
+            <VirtualTrading selectedSymbol={selectedSymbol} currentPrice={43250} />
           </TabsContent>
         </Tabs>
       </div>

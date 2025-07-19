@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import StockSearchBar from './StockSearchBar';
 
 interface BacktestResult {
   totalTrades: number;
@@ -25,6 +26,19 @@ const StrategyTester = () => {
   const [strategy, setStrategy] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<BacktestResult | null>(null);
+
+  const handleSymbolSelect = (selectedSymbol: string) => {
+    // Extract the base symbol from TradingView format
+    let baseSymbol = selectedSymbol;
+    if (selectedSymbol.includes('BINANCE:')) {
+      baseSymbol = selectedSymbol.replace('BINANCE:', '').replace('USDT', '');
+    } else if (selectedSymbol.includes('FX:')) {
+      baseSymbol = selectedSymbol.replace('FX:', '');
+    } else if (selectedSymbol.includes('NASDAQ:') || selectedSymbol.includes('NYSE:')) {
+      baseSymbol = selectedSymbol.split(':')[1];
+    }
+    setSymbol(baseSymbol);
+  };
 
   const runBacktest = async () => {
     if (!symbol || !strategy) return;
@@ -108,12 +122,7 @@ if (close > resistance) {
                 <label className="text-sm font-medium text-foreground mb-2 block">
                   Symbol
                 </label>
-                <Input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  placeholder="e.g., NIFTY50, RELIANCE"
-                  className="bg-secondary/50 border-muted"
-                />
+                <StockSearchBar onSymbolSelect={handleSymbolSelect} />
               </div>
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">

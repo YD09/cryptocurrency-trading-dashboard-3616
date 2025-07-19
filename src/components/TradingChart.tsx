@@ -59,26 +59,15 @@ const TradingChart = ({ symbol, height = 500 }: TradingChartProps) => {
       containerRef.current.innerHTML = '';
     }
 
-    // Map symbols to TradingView format
-    const getSymbolForTradingView = (sym: string) => {
-      const symbolMap: Record<string, string> = {
-        'NIFTY50': 'NSE:NIFTY',
-        'BANKNIFTY': 'NSE:BANKNIFTY',
-        'SENSEX': 'BSE:SENSEX',
-        'GOLD': 'MCX:GOLD1!',
-        'SILVER': 'MCX:SILVER1!',
-        'CRUDE': 'MCX:CRUDEOIL1!',
-      };
-      
-      return symbolMap[sym] || `NSE:${sym}`;
-    };
-
+    // Clean and format the symbol for TradingView
+    const cleanSymbol = symbol.replace(/[^a-zA-Z0-9:]/g, '');
+    
     widgetRef.current = new window.TradingView.widget({
       width: '100%',
       height: height,
-      symbol: getSymbolForTradingView(symbol),
+      symbol: cleanSymbol,
       interval: '1D',
-      timezone: 'Asia/Kolkata',
+      timezone: 'Etc/UTC',
       theme: 'dark',
       style: '1',
       locale: 'en',
@@ -88,10 +77,7 @@ const TradingChart = ({ symbol, height = 500 }: TradingChartProps) => {
       hide_legend: false,
       save_image: false,
       container_id: containerRef.current.id,
-      studies: [
-        'MASimple@tv-basicstudies',
-        'RSI@tv-basicstudies'
-      ],
+      studies: [], // No default indicators - let users add their own
       overrides: {
         'paneProperties.background': '#141413',
         'paneProperties.vertGridProperties.color': '#3A3935',
@@ -104,19 +90,47 @@ const TradingChart = ({ symbol, height = 500 }: TradingChartProps) => {
         'mainSeriesProperties.candleStyle.borderDownColor': '#D2886F',
         'mainSeriesProperties.candleStyle.wickUpColor': '#7EBF8E',
         'mainSeriesProperties.candleStyle.wickDownColor': '#D2886F',
+        'mainSeriesProperties.volumeColor': '#8989DE',
+        'mainSeriesProperties.volumeColor0': '#D2886F',
       },
+      disabled_features: [
+        'use_localstorage_for_settings',
+        'volume_force_overlay',
+        'create_volume_indicator_by_default'
+      ],
+      enabled_features: [
+        'study_templates',
+        'side_toolbar_in_fullscreen_mode',
+        'use_localstorage_for_settings'
+      ],
     });
+  };
+
+  // Format symbol for display
+  const formatSymbolForDisplay = (symbol: string) => {
+    if (symbol.includes('BINANCE:')) {
+      const crypto = symbol.replace('BINANCE:', '').replace('USDT', '');
+      return `${crypto} vs USD`;
+    }
+    if (symbol.includes('FX:')) {
+      const forex = symbol.replace('FX:', '');
+      return `${forex.slice(0, 3)} vs ${forex.slice(3)}`;
+    }
+    if (symbol.includes('NASDAQ:') || symbol.includes('NYSE:')) {
+      return symbol.split(':')[1];
+    }
+    return symbol;
   };
 
   return (
     <div className="glass-card p-4 rounded-lg">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-foreground">{symbol} Chart</h3>
-        <p className="text-sm text-muted-foreground">Live trading data</p>
+        <h3 className="text-lg font-semibold text-foreground">{formatSymbolForDisplay(symbol)}</h3>
+        <p className="text-sm text-muted-foreground">Live trading data - Add indicators from the toolbar</p>
       </div>
       <div 
         ref={containerRef}
-        id={`tradingview_${symbol}_${Date.now()}`}
+        id={`tradingview_${symbol.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`}
         className="w-full rounded-lg overflow-hidden"
         style={{ height: `${height}px` }}
       />

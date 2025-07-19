@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, TrendingUp, BarChart3 } from 'lucide-react';
+import { Search, TrendingUp, BarChart3, Bitcoin, DollarSign, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 interface StockSuggestion {
   symbol: string;
   name: string;
-  type: 'equity' | 'index' | 'commodity';
+  type: 'crypto' | 'forex' | 'commodity' | 'stock' | 'index';
   exchange: string;
+  tradingViewSymbol: string;
 }
 
 interface StockSearchBarProps {
@@ -21,19 +22,84 @@ const StockSearchBar = ({ onSymbolSelect }: StockSearchBarProps) => {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Mock Indian stock data - in real app, this would come from API
+  // Comprehensive market data including crypto, forex, commodities, and stocks
   const stockData: StockSuggestion[] = [
-    { symbol: 'RELIANCE', name: 'Reliance Industries Ltd', type: 'equity', exchange: 'NSE' },
-    { symbol: 'TCS', name: 'Tata Consultancy Services', type: 'equity', exchange: 'NSE' },
-    { symbol: 'INFY', name: 'Infosys Limited', type: 'equity', exchange: 'NSE' },
-    { symbol: 'HDFC', name: 'HDFC Bank Limited', type: 'equity', exchange: 'NSE' },
-    { symbol: 'ICICIBANK', name: 'ICICI Bank Limited', type: 'equity', exchange: 'NSE' },
-    { symbol: 'NIFTY50', name: 'Nifty 50', type: 'index', exchange: 'NSE' },
-    { symbol: 'BANKNIFTY', name: 'Bank Nifty', type: 'index', exchange: 'NSE' },
-    { symbol: 'SENSEX', name: 'BSE Sensex', type: 'index', exchange: 'BSE' },
-    { symbol: 'GOLD', name: 'Gold', type: 'commodity', exchange: 'MCX' },
-    { symbol: 'SILVER', name: 'Silver', type: 'commodity', exchange: 'MCX' },
-    { symbol: 'CRUDE', name: 'Crude Oil', type: 'commodity', exchange: 'MCX' },
+    // Cryptocurrencies
+    { symbol: 'BTCUSD', name: 'Bitcoin', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:BTCUSDT' },
+    { symbol: 'ETHUSD', name: 'Ethereum', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:ETHUSDT' },
+    { symbol: 'BNBUSD', name: 'Binance Coin', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:BNBUSDT' },
+    { symbol: 'ADAUSD', name: 'Cardano', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:ADAUSDT' },
+    { symbol: 'SOLUSD', name: 'Solana', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:SOLUSDT' },
+    { symbol: 'DOTUSD', name: 'Polkadot', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:DOTUSDT' },
+    { symbol: 'MATICUSD', name: 'Polygon', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:MATICUSDT' },
+    { symbol: 'LINKUSD', name: 'Chainlink', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:LINKUSDT' },
+    { symbol: 'UNIUSD', name: 'Uniswap', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:UNIUSDT' },
+    { symbol: 'AVAXUSD', name: 'Avalanche', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:AVAXUSDT' },
+    { symbol: 'ATOMUSD', name: 'Cosmos', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:ATOMUSDT' },
+    { symbol: 'LTCUSD', name: 'Litecoin', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:LTCUSDT' },
+    { symbol: 'XRPUSD', name: 'Ripple', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:XRPUSDT' },
+    { symbol: 'DOGEUSD', name: 'Dogecoin', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:DOGEUSDT' },
+    { symbol: 'SHIBUSD', name: 'Shiba Inu', type: 'crypto', exchange: 'CRYPTO', tradingViewSymbol: 'BINANCE:SHIBUSDT' },
+    
+    // Forex Pairs
+    { symbol: 'EURUSD', name: 'Euro vs US Dollar', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:EURUSD' },
+    { symbol: 'GBPUSD', name: 'British Pound vs US Dollar', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:GBPUSD' },
+    { symbol: 'USDJPY', name: 'US Dollar vs Japanese Yen', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:USDJPY' },
+    { symbol: 'USDCHF', name: 'US Dollar vs Swiss Franc', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:USDCHF' },
+    { symbol: 'AUDUSD', name: 'Australian Dollar vs US Dollar', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:AUDUSD' },
+    { symbol: 'USDCAD', name: 'US Dollar vs Canadian Dollar', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:USDCAD' },
+    { symbol: 'NZDUSD', name: 'New Zealand Dollar vs US Dollar', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:NZDUSD' },
+    { symbol: 'EURGBP', name: 'Euro vs British Pound', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:EURGBP' },
+    { symbol: 'EURJPY', name: 'Euro vs Japanese Yen', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:EURJPY' },
+    { symbol: 'GBPJPY', name: 'British Pound vs Japanese Yen', type: 'forex', exchange: 'FOREX', tradingViewSymbol: 'FX:GBPJPY' },
+    
+    // Commodities
+    { symbol: 'XAUUSD', name: 'Gold', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:XAUUSD' },
+    { symbol: 'XAGUSD', name: 'Silver', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:XAGUSD' },
+    { symbol: 'USOIL', name: 'Crude Oil WTI', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:USOIL' },
+    { symbol: 'UKOIL', name: 'Crude Oil Brent', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:UKOIL' },
+    { symbol: 'NATGAS', name: 'Natural Gas', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:NATGAS' },
+    { symbol: 'COPPER', name: 'Copper', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:COPPER' },
+    { symbol: 'PLATINUM', name: 'Platinum', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:PLATINUM' },
+    { symbol: 'PALLADIUM', name: 'Palladium', type: 'commodity', exchange: 'FOREX', tradingViewSymbol: 'FX:PALLADIUM' },
+    
+    // Major US Stocks
+    { symbol: 'AAPL', name: 'Apple Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:AAPL' },
+    { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:MSFT' },
+    { symbol: 'GOOGL', name: 'Alphabet Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:GOOGL' },
+    { symbol: 'AMZN', name: 'Amazon.com Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:AMZN' },
+    { symbol: 'TSLA', name: 'Tesla Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:TSLA' },
+    { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:NVDA' },
+    { symbol: 'META', name: 'Meta Platforms Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:META' },
+    { symbol: 'NFLX', name: 'Netflix Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:NFLX' },
+    { symbol: 'ADBE', name: 'Adobe Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:ADBE' },
+    { symbol: 'CRM', name: 'Salesforce Inc', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:CRM' },
+    { symbol: 'JPM', name: 'JPMorgan Chase & Co', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:JPM' },
+    { symbol: 'JNJ', name: 'Johnson & Johnson', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:JNJ' },
+    { symbol: 'PG', name: 'Procter & Gamble Co', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:PG' },
+    { symbol: 'V', name: 'Visa Inc', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:V' },
+    { symbol: 'WMT', name: 'Walmart Inc', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:WMT' },
+    { symbol: 'DIS', name: 'Walt Disney Co', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:DIS' },
+    { symbol: 'KO', name: 'Coca-Cola Co', type: 'stock', exchange: 'NYSE', tradingViewSymbol: 'NYSE:KO' },
+    { symbol: 'PEP', name: 'PepsiCo Inc', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:PEP' },
+    { symbol: 'INTC', name: 'Intel Corporation', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:INTC' },
+    { symbol: 'AMD', name: 'Advanced Micro Devices', type: 'stock', exchange: 'NASDAQ', tradingViewSymbol: 'NASDAQ:AMD' },
+    
+    // Major Indices
+    { symbol: 'SPX', name: 'S&P 500', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'SP:SPX' },
+    { symbol: 'NDX', name: 'NASDAQ 100', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'NASDAQ:NDX' },
+    { symbol: 'DJI', name: 'Dow Jones Industrial Average', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'DJ:DJI' },
+    { symbol: 'RUT', name: 'Russell 2000', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'RUSSELL:RUT' },
+    { symbol: 'VIX', name: 'CBOE Volatility Index', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'CBOE:VIX' },
+    { symbol: 'FTSE', name: 'FTSE 100', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'FTSE:FTSE' },
+    { symbol: 'DAX', name: 'DAX Index', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'DEU:DAX' },
+    { symbol: 'NIKKEI', name: 'Nikkei 225', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'NIKKEI:NIKKEI' },
+    { symbol: 'HANG SENG', name: 'Hang Seng Index', type: 'index', exchange: 'INDEX', tradingViewSymbol: 'HKSE:HSI' },
+    
+    // Indian Markets (keeping some for reference)
+    { symbol: 'NIFTY50', name: 'Nifty 50', type: 'index', exchange: 'NSE', tradingViewSymbol: 'NSE:NIFTY' },
+    { symbol: 'BANKNIFTY', name: 'Bank Nifty', type: 'index', exchange: 'NSE', tradingViewSymbol: 'NSE:BANKNIFTY' },
+    { symbol: 'SENSEX', name: 'BSE Sensex', type: 'index', exchange: 'BSE', tradingViewSymbol: 'BSE:SENSEX' },
   ];
 
   useEffect(() => {
@@ -42,7 +108,7 @@ const StockSearchBar = ({ onSymbolSelect }: StockSearchBarProps) => {
         (stock) =>
           stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
           stock.name.toLowerCase().includes(query.toLowerCase())
-      ).slice(0, 8);
+      ).slice(0, 10);
       setSuggestions(filtered);
       setShowSuggestions(true);
       setSelectedIndex(-1);
@@ -82,17 +148,21 @@ const StockSearchBar = ({ onSymbolSelect }: StockSearchBarProps) => {
   const handleSelect = (suggestion: StockSuggestion) => {
     setQuery(suggestion.symbol);
     setShowSuggestions(false);
-    onSymbolSelect(suggestion.symbol);
+    onSymbolSelect(suggestion.tradingViewSymbol);
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'equity':
-        return <TrendingUp className="h-4 w-4 text-success" />;
-      case 'index':
-        return <BarChart3 className="h-4 w-4 text-primary" />;
+      case 'crypto':
+        return <Bitcoin className="h-4 w-4 text-yellow-500" />;
+      case 'forex':
+        return <DollarSign className="h-4 w-4 text-green-500" />;
       case 'commodity':
-        return <div className="h-4 w-4 rounded-full bg-warning" />;
+        return <Zap className="h-4 w-4 text-orange-500" />;
+      case 'stock':
+        return <TrendingUp className="h-4 w-4 text-blue-500" />;
+      case 'index':
+        return <BarChart3 className="h-4 w-4 text-purple-500" />;
       default:
         return null;
     }
@@ -105,7 +175,7 @@ const StockSearchBar = ({ onSymbolSelect }: StockSearchBarProps) => {
         <Input
           ref={inputRef}
           type="text"
-          placeholder="Search stocks, indices, commodities..."
+          placeholder="Search crypto, forex, stocks, commodities..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -115,7 +185,7 @@ const StockSearchBar = ({ onSymbolSelect }: StockSearchBarProps) => {
       </div>
 
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-secondary border border-muted rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-secondary border border-muted rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
           {suggestions.map((suggestion, index) => (
             <Button
               key={`${suggestion.symbol}-${suggestion.exchange}`}
