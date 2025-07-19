@@ -1,639 +1,367 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { TrendingUp, TrendingDown, DollarSign, PlusCircle, MinusCircle, Clock, Target, StopCircle } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, Star, Menu } from 'lucide-react';
+import TradingChart from './TradingChart';
 
 interface VirtualTradingProps {
   selectedSymbol: string;
   currentPrice?: number;
 }
 
-interface Trade {
-  id: string;
+interface Instrument {
   symbol: string;
-  trade_type: 'BUY' | 'SELL';
-  order_type: 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'TAKE_PROFIT';
-  quantity: number;
-  entry_price: number;
-  exit_price?: number;
-  amount: number;
-  stop_loss?: number;
-  take_profit?: number;
-  status: 'OPEN' | 'CLOSED' | 'CANCELLED';
-  realized_pnl?: number;
-  unrealized_pnl?: number;
-  entry_time: string;
-  exit_time?: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  isFavorite?: boolean;
 }
 
-interface Position {
-  id: string;
-  symbol: string;
-  total_quantity: number;
-  average_price: number;
-  current_price: number;
-  invested_amount: number;
-  current_value: number;
-  unrealized_pnl: number;
-  day_pnl: number;
-}
+// Mock user portfolio (no authentication required)
+const mockPortfolio = {
+  balance: 10000,
+  equity: 10000,
+  margin: 0,
+  freeMargin: 10000,
+  marginLevel: 0,
+  pnl: 0
+};
 
-interface Portfolio {
-  total_capital: number;
-  available_balance: number;
-  invested_amount: number;
-  current_value: number;
-  total_pnl: number;
-  day_pnl: number;
-  total_trades: number;
-  winning_trades: number;
-  losing_trades: number;
-  roi_percentage: number;
-}
+// Mock favorite instruments
+const favoriteInstruments: Instrument[] = [
+  { symbol: 'XAUUSD', name: 'Gold', price: 2045.32, change: -12.45, changePercent: -0.61, isFavorite: true },
+  { symbol: 'BTCUSD', name: 'Bitcoin', price: 43250.75, change: 850.22, changePercent: 2.01, isFavorite: true },
+  { symbol: 'AAPL', name: 'Apple Inc', price: 195.89, change: 2.45, changePercent: 1.27, isFavorite: true },
+  { symbol: 'EURUSD', name: 'Euro vs Dollar', price: 1.0875, change: 0.0023, changePercent: 0.21, isFavorite: true },
+  { symbol: 'GBPUSD', name: 'Pound vs Dollar', price: 1.2650, change: -0.0045, changePercent: -0.35, isFavorite: true },
+  { symbol: 'USDJPY', name: 'Dollar vs Yen', price: 148.95, change: 0.85, changePercent: 0.57, isFavorite: true },
+  { symbol: 'USOIL', name: 'US Oil', price: 72.85, change: -1.25, changePercent: -1.69, isFavorite: true },
+  { symbol: 'USTEC', name: 'US Tech 100', price: 16875.45, change: 125.30, changePercent: 0.75, isFavorite: true }
+];
+
+// All available instruments for search
+const allInstruments: Instrument[] = [
+  ...favoriteInstruments,
+  { symbol: 'TSLA', name: 'Tesla Inc', price: 248.50, change: 5.25, changePercent: 2.16 },
+  { symbol: 'MSFT', name: 'Microsoft', price: 378.85, change: -2.45, changePercent: -0.64 },
+  { symbol: 'GOOGL', name: 'Alphabet Inc', price: 142.65, change: 1.85, changePercent: 1.31 },
+  { symbol: 'NVDA', name: 'NVIDIA Corp', price: 481.20, change: 12.85, changePercent: 2.75 },
+  { symbol: 'META', name: 'Meta Platforms', price: 355.70, change: -8.30, changePercent: -2.28 },
+];
 
 export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTradingProps) => {
-  const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSymbol, setActiveSymbol] = useState(selectedSymbol || 'BTCUSD');
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
-  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'TAKE_PROFIT'>('MARKET');
-  const [inputType, setInputType] = useState<'quantity' | 'amount'>('quantity');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [amount, setAmount] = useState<number>(1000);
-  const [limitPrice, setLimitPrice] = useState<number>(currentPrice);
-  const [stopLoss, setStopLoss] = useState<number | undefined>();
-  const [takeProfit, setTakeProfit] = useState<number | undefined>();
-  
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  const { toast } = useToast();
+  const [volume, setVolume] = useState('0.01');
+  const [stopLoss, setStopLoss] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
+  const [portfolio] = useState(mockPortfolio);
+  const [instruments] = useState(allInstruments);
 
-  useEffect(() => {
-    fetchPortfolioData();
-  }, []);
+  const filteredInstruments = instruments.filter(instrument =>
+    instrument.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    instrument.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  useEffect(() => {
-    if (currentPrice > 0) {
-      setLimitPrice(currentPrice);
-    }
-  }, [currentPrice]);
+  const currentInstrument = instruments.find(i => i.symbol === activeSymbol) || instruments[0];
+  const instrumentPrice = currentPrice > 0 ? currentPrice : currentInstrument.price;
 
-  const fetchPortfolioData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please sign in to use virtual trading.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Fetch or create portfolio
-      const { data: portfolioData, error: portfolioError } = await supabase
-        .from('user_portfolio')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (portfolioError && portfolioError.code !== 'PGRST116') {
-        throw portfolioError;
-      }
-
-      if (!portfolioData) {
-        // Create initial portfolio
-        const { data: newPortfolio, error: createError } = await supabase
-          .from('user_portfolio')
-          .insert({
-            user_id: user.id,
-            total_capital: 1000000,
-            available_balance: 1000000,
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        setPortfolio(newPortfolio);
-      } else {
-        setPortfolio(portfolioData);
-      }
-
-      // Fetch positions
-      const { data: positionsData, error: positionsError } = await supabase
-        .from('user_positions')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (positionsError) throw positionsError;
-      setPositions(positionsData || []);
-
-      // Fetch trades
-      const { data: tradesData, error: tradesError } = await supabase
-        .from('user_trades')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (tradesError) throw tradesError;
-      setTrades(tradesData || []);
-
-    } catch (error) {
-      console.error('Error fetching portfolio data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load portfolio data.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateQuantityFromAmount = () => {
-    if (currentPrice > 0 && amount > 0) {
-      return Math.floor(amount / currentPrice);
-    }
-    return 1;
-  };
-
-  const calculateAmountFromQuantity = () => {
-    return quantity * (limitPrice || currentPrice);
-  };
-
-  const placeTrade = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const finalQuantity = inputType === 'amount' ? calculateQuantityFromAmount() : quantity;
-      const finalAmount = inputType === 'quantity' ? calculateAmountFromQuantity() : amount;
-      const finalPrice = orderType === 'MARKET' ? currentPrice : limitPrice;
-
-      if (!portfolio || portfolio.available_balance < finalAmount) {
-        toast({
-          title: "Insufficient Balance",
-          description: "You don't have enough balance for this trade.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Create trade record
-      const { error: tradeError } = await supabase
-        .from('user_trades')
-        .insert({
-          user_id: user.id,
-          symbol: selectedSymbol,
-          trade_type: tradeType,
-          order_type: orderType,
-          quantity: finalQuantity,
-          entry_price: finalPrice,
-          amount: finalAmount,
-          stop_loss: stopLoss,
-          take_profit: takeProfit,
-          status: orderType === 'MARKET' ? 'OPEN' : 'OPEN' // For simplicity, all orders execute immediately
-        });
-
-      if (tradeError) throw tradeError;
-
-      // Update or create position
-      const existingPosition = positions.find(p => p.symbol === selectedSymbol);
-      
-      if (existingPosition) {
-        // Update existing position
-        const newQuantity = tradeType === 'BUY' 
-          ? existingPosition.total_quantity + finalQuantity
-          : existingPosition.total_quantity - finalQuantity;
-        
-        const newInvestedAmount = tradeType === 'BUY'
-          ? existingPosition.invested_amount + finalAmount
-          : existingPosition.invested_amount - finalAmount;
-
-        const newAveragePrice = newQuantity > 0 ? newInvestedAmount / newQuantity : 0;
-
-        if (newQuantity <= 0) {
-          // Close position
-          await supabase
-            .from('user_positions')
-            .delete()
-            .eq('id', existingPosition.id);
-        } else {
-          // Update position
-          await supabase
-            .from('user_positions')
-            .update({
-              total_quantity: newQuantity,
-              average_price: newAveragePrice,
-              current_price: currentPrice,
-              invested_amount: newInvestedAmount,
-              current_value: newQuantity * currentPrice,
-              unrealized_pnl: (newQuantity * currentPrice) - newInvestedAmount
-            })
-            .eq('id', existingPosition.id);
-        }
-      } else if (tradeType === 'BUY') {
-        // Create new position for BUY
-        await supabase
-          .from('user_positions')
-          .insert({
-            user_id: user.id,
-            symbol: selectedSymbol,
-            total_quantity: finalQuantity,
-            average_price: finalPrice,
-            current_price: currentPrice,
-            invested_amount: finalAmount,
-            current_value: finalQuantity * currentPrice,
-            unrealized_pnl: (finalQuantity * currentPrice) - finalAmount
-          });
-      }
-
-      // Update portfolio
-      const newAvailableBalance = tradeType === 'BUY' 
-        ? portfolio.available_balance - finalAmount
-        : portfolio.available_balance + finalAmount;
-
-      await supabase
-        .from('user_portfolio')
-        .update({
-          available_balance: newAvailableBalance,
-          total_trades: portfolio.total_trades + 1
-        })
-        .eq('user_id', user.id);
-
-      toast({
-        title: "Trade Executed",
-        description: `${tradeType} order for ${finalQuantity} shares of ${selectedSymbol} executed successfully.`,
-      });
-
-      // Refresh data
-      fetchPortfolioData();
-      setIsTradeModalOpen(false);
-      resetTradeForm();
-
-    } catch (error) {
-      console.error('Error placing trade:', error);
-      toast({
-        title: "Trade Failed",
-        description: "Failed to execute trade. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const resetTradeForm = () => {
-    setQuantity(1);
-    setAmount(1000);
-    setStopLoss(undefined);
-    setTakeProfit(undefined);
-    setOrderType('MARKET');
+  const formatPrice = (price: number, symbol: string) => {
+    if (symbol.includes('JPY')) return price.toFixed(3);
+    if (symbol.includes('USD') && !symbol.includes('XAU')) return price.toFixed(5);
+    return price.toFixed(2);
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'INR',
+      currency: 'USD',
       minimumFractionDigits: 2
     }).format(value);
   };
 
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('en-IN').format(value);
+  const handlePlaceTrade = () => {
+    const volumeNum = parseFloat(volume);
+    const lotSize = activeSymbol.includes('USD') && !activeSymbol.includes('XAU') ? 100000 : 1;
+    const tradeValue = volumeNum * lotSize * instrumentPrice;
+    
+    if (tradeValue > portfolio.freeMargin) {
+      alert('Insufficient margin for this trade');
+      return;
+    }
+
+    // Mock trade execution
+    alert(`${tradeType} order placed: ${volume} lots of ${activeSymbol} at ${formatPrice(instrumentPrice, activeSymbol)}`);
   };
 
-  if (loading) {
-    return (
-      <Card className="glass-card">
-        <CardContent className="flex items-center justify-center h-40">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-sm text-muted-foreground">Loading portfolio...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Portfolio Summary */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            Portfolio Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Total Capital</p>
-              <p className="text-lg font-semibold">{formatCurrency(portfolio?.total_capital || 0)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Available Balance</p>
-              <p className="text-lg font-semibold text-green-600">{formatCurrency(portfolio?.available_balance || 0)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Total P&L</p>
-              <p className={`text-lg font-semibold ${(portfolio?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(portfolio?.total_pnl || 0)}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">ROI</p>
-              <p className={`text-lg font-semibold ${(portfolio?.roi_percentage || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {(portfolio?.roi_percentage || 0).toFixed(2)}%
-              </p>
+    <div className="h-screen bg-[#0a0a0a] text-white flex">
+      {/* Left Sidebar */}
+      <div className="w-80 bg-[#1a1a1a] border-r border-gray-800 flex flex-col">
+        {/* Search Bar */}
+        <div className="p-4 border-b border-gray-800">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search instruments..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 bg-[#2a2a2a] border-gray-700 text-white placeholder-gray-400"
+            />
+          </div>
+        </div>
+
+        {/* Instruments List */}
+        <div className="flex-1 overflow-y-auto">
+          <Tabs defaultValue="favorites" className="w-full">
+            <TabsList className="w-full bg-[#2a2a2a] border-b border-gray-800 rounded-none h-12">
+              <TabsTrigger value="favorites" className="flex-1 text-gray-300">Favorites</TabsTrigger>
+              <TabsTrigger value="all" className="flex-1 text-gray-300">All</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="favorites" className="mt-0">
+              <div className="space-y-1">
+                {favoriteInstruments.map((instrument) => (
+                  <div
+                    key={instrument.symbol}
+                    onClick={() => setActiveSymbol(instrument.symbol)}
+                    className={`p-3 hover:bg-[#2a2a2a] cursor-pointer border-l-2 transition-colors ${
+                      activeSymbol === instrument.symbol ? 'bg-[#2a2a2a] border-l-blue-500' : 'border-l-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                        <span className="text-sm font-medium">{instrument.symbol}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-mono">{formatPrice(instrument.price, instrument.symbol)}</div>
+                        <div className={`text-xs flex items-center gap-1 ${
+                          instrument.change >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                          {instrument.change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          {instrument.change >= 0 ? '+' : ''}{instrument.changePercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="all" className="mt-0">
+              <div className="space-y-1">
+                {filteredInstruments.map((instrument) => (
+                  <div
+                    key={instrument.symbol}
+                    onClick={() => setActiveSymbol(instrument.symbol)}
+                    className={`p-3 hover:bg-[#2a2a2a] cursor-pointer border-l-2 transition-colors ${
+                      activeSymbol === instrument.symbol ? 'bg-[#2a2a2a] border-l-blue-500' : 'border-l-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">{instrument.symbol}</div>
+                        <div className="text-xs text-gray-400">{instrument.name}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-mono">{formatPrice(instrument.price, instrument.symbol)}</div>
+                        <div className={`text-xs ${instrument.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {instrument.change >= 0 ? '+' : ''}{instrument.changePercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <div className="h-14 bg-[#1a1a1a] border-b border-gray-800 flex items-center justify-between px-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-semibold">{currentInstrument.symbol}</h1>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-mono">{formatPrice(instrumentPrice, activeSymbol)}</span>
+              <Badge variant={currentInstrument.change >= 0 ? "default" : "destructive"} className="ml-2">
+                {currentInstrument.change >= 0 ? '+' : ''}{currentInstrument.changePercent.toFixed(2)}%
+              </Badge>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          
+          <div className="flex items-center gap-4 text-sm">
+            <span>Balance: {formatCurrency(portfolio.balance)}</span>
+            <span>Equity: {formatCurrency(portfolio.equity)}</span>
+            <span>Free Margin: {formatCurrency(portfolio.freeMargin)}</span>
+          </div>
+        </div>
 
-      {/* Trade Button and Current Symbol */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Quick Trade - {selectedSymbol}
+        <div className="flex-1 flex">
+          {/* Chart Area */}
+          <div className="flex-1 bg-[#0a0a0a] p-4">
+            <div className="h-full bg-[#1a1a1a] rounded-lg overflow-hidden">
+              <TradingChart symbol={activeSymbol} height={600} />
             </div>
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Current Price</p>
-              <p className="text-lg font-semibold">{formatCurrency(currentPrice)}</p>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Dialog open={isTradeModalOpen} onOpenChange={setIsTradeModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full" size="lg">
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Place Trade
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Place Trade - {selectedSymbol}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                {/* Trade Type */}
-                <div className="flex gap-2">
+          </div>
+
+          {/* Right Trading Panel */}
+          <div className="w-80 bg-[#1a1a1a] border-l border-gray-800 p-4">
+            <Card className="bg-[#2a2a2a] border-gray-700">
+              <CardContent className="p-4 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-white mb-2">{activeSymbol}</h3>
+                  <div className="text-2xl font-mono text-white">{formatPrice(instrumentPrice, activeSymbol)}</div>
+                </div>
+
+                {/* Buy/Sell Buttons */}
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant={tradeType === 'BUY' ? 'default' : 'outline'}
                     onClick={() => setTradeType('BUY')}
-                    className="flex-1"
+                    className="bg-green-600 hover:bg-green-700 text-white border-green-600"
                   >
                     BUY
                   </Button>
                   <Button
                     variant={tradeType === 'SELL' ? 'default' : 'outline'}
                     onClick={() => setTradeType('SELL')}
-                    className="flex-1"
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
                   >
                     SELL
                   </Button>
                 </div>
 
-                {/* Order Type */}
+                {/* Volume Input */}
                 <div>
-                  <Label>Order Type</Label>
-                  <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MARKET">Market Order</SelectItem>
-                      <SelectItem value="LIMIT">Limit Order</SelectItem>
-                      <SelectItem value="STOP_LOSS">Stop Loss</SelectItem>
-                      <SelectItem value="TAKE_PROFIT">Take Profit</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Input Type Toggle */}
-                <div className="flex gap-2">
-                  <Button
-                    variant={inputType === 'quantity' ? 'default' : 'outline'}
-                    onClick={() => setInputType('quantity')}
-                    className="flex-1"
-                    size="sm"
-                  >
-                    Quantity
-                  </Button>
-                  <Button
-                    variant={inputType === 'amount' ? 'default' : 'outline'}
-                    onClick={() => setInputType('amount')}
-                    className="flex-1"
-                    size="sm"
-                  >
-                    Amount
-                  </Button>
-                </div>
-
-                {/* Quantity/Amount Input */}
-                {inputType === 'quantity' ? (
-                  <div>
-                    <Label>Quantity</Label>
-                    <Input
-                      type="number"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Number(e.target.value))}
-                      min="1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Approx. Amount: {formatCurrency(calculateAmountFromQuantity())}
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <Label>Amount (₹)</Label>
-                    <Input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      min="1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Approx. Quantity: {formatNumber(calculateQuantityFromAmount())}
-                    </p>
-                  </div>
-                )}
-
-                {/* Limit Price (for non-market orders) */}
-                {orderType !== 'MARKET' && (
-                  <div>
-                    <Label>Limit Price (₹)</Label>
-                    <Input
-                      type="number"
-                      value={limitPrice}
-                      onChange={(e) => setLimitPrice(Number(e.target.value))}
-                      step="0.01"
-                    />
-                  </div>
-                )}
-
-                {/* Stop Loss */}
-                <div>
-                  <Label>Stop Loss (Optional)</Label>
+                  <label className="text-sm text-gray-400 block mb-1">Volume (Lots)</label>
                   <Input
                     type="number"
-                    value={stopLoss || ''}
-                    onChange={(e) => setStopLoss(e.target.value ? Number(e.target.value) : undefined)}
-                    placeholder="Enter stop loss price"
+                    value={volume}
+                    onChange={(e) => setVolume(e.target.value)}
                     step="0.01"
+                    min="0.01"
+                    className="bg-[#1a1a1a] border-gray-600 text-white"
                   />
+                  <div className="text-xs text-gray-400 mt-1">
+                    Value: {formatCurrency(parseFloat(volume || '0') * (activeSymbol.includes('USD') && !activeSymbol.includes('XAU') ? 100000 : 1) * instrumentPrice)}
+                  </div>
                 </div>
 
                 {/* Take Profit */}
                 <div>
-                  <Label>Take Profit (Optional)</Label>
+                  <label className="text-sm text-gray-400 block mb-1">Take Profit</label>
                   <Input
                     type="number"
-                    value={takeProfit || ''}
-                    onChange={(e) => setTakeProfit(e.target.value ? Number(e.target.value) : undefined)}
-                    placeholder="Enter take profit price"
+                    value={takeProfit}
+                    onChange={(e) => setTakeProfit(e.target.value)}
+                    placeholder="Not set"
                     step="0.01"
+                    className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-500"
                   />
                 </div>
 
-                <Button onClick={placeTrade} className="w-full">
-                  Execute {tradeType} Order
+                {/* Stop Loss */}
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Stop Loss</label>
+                  <Input
+                    type="number"
+                    value={stopLoss}
+                    onChange={(e) => setStopLoss(e.target.value)}
+                    placeholder="Not set"
+                    step="0.01"
+                    className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-500"
+                  />
+                </div>
+
+                {/* Place Trade Button */}
+                <Button
+                  onClick={handlePlaceTrade}
+                  className={`w-full ${
+                    tradeType === 'BUY' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  } text-white font-semibold py-3`}
+                >
+                  {tradeType} {activeSymbol}
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
 
-      {/* Positions and Trades */}
-      <Tabs defaultValue="positions" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="positions">Open Positions</TabsTrigger>
-          <TabsTrigger value="trades">Trade History</TabsTrigger>
-          <TabsTrigger value="closed">Closed Trades</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="positions">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Open Positions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {positions.length === 0 ? (
-                <p className="text-center text-muted-foreground">No open positions</p>
-              ) : (
-                <div className="space-y-4">
-                  {positions.map((position) => (
-                    <div key={position.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <h4 className="font-semibold">{position.symbol}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {formatNumber(position.total_quantity)} shares @ {formatCurrency(position.average_price)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${position.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(position.unrealized_pnl)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(position.current_value)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                {/* Portfolio Summary */}
+                <div className="border-t border-gray-600 pt-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Balance:</span>
+                    <span className="text-white">{formatCurrency(portfolio.balance)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Equity:</span>
+                    <span className="text-white">{formatCurrency(portfolio.equity)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Free Margin:</span>
+                    <span className="text-white">{formatCurrency(portfolio.freeMargin)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">P&L:</span>
+                    <span className={portfolio.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {formatCurrency(portfolio.pnl)}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
 
-        <TabsContent value="trades">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Recent Trades</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {trades.filter(t => t.status === 'OPEN').length === 0 ? (
-                <p className="text-center text-muted-foreground">No recent trades</p>
-              ) : (
-                <div className="space-y-4">
-                  {trades.filter(t => t.status === 'OPEN').map((trade) => (
-                    <div key={trade.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Badge variant={trade.trade_type === 'BUY' ? 'default' : 'secondary'}>
-                          {trade.trade_type}
-                        </Badge>
-                        <div>
-                          <h4 className="font-semibold">{trade.symbol}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {formatNumber(trade.quantity)} @ {formatCurrency(trade.entry_price)}
-                          </p>
-                        </div>
+            {/* Positions/Orders Tabs */}
+            <div className="mt-4">
+              <Tabs defaultValue="positions" className="w-full">
+                <TabsList className="w-full bg-[#2a2a2a] border border-gray-700">
+                  <TabsTrigger value="positions" className="flex-1 text-gray-300">Positions</TabsTrigger>
+                  <TabsTrigger value="orders" className="flex-1 text-gray-300">Orders</TabsTrigger>
+                  <TabsTrigger value="history" className="flex-1 text-gray-300">History</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="positions" className="mt-2">
+                  <Card className="bg-[#2a2a2a] border-gray-700">
+                    <CardContent className="p-3">
+                      <div className="text-center text-gray-400 text-sm py-8">
+                        No open positions
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrency(trade.amount)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(trade.entry_time).toLocaleDateString()}
-                        </p>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                <TabsContent value="orders" className="mt-2">
+                  <Card className="bg-[#2a2a2a] border-gray-700">
+                    <CardContent className="p-3">
+                      <div className="text-center text-gray-400 text-sm py-8">
+                        No pending orders
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="closed">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Closed Trades</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {trades.filter(t => t.status === 'CLOSED').length === 0 ? (
-                <p className="text-center text-muted-foreground">No closed trades</p>
-              ) : (
-                <div className="space-y-4">
-                  {trades.filter(t => t.status === 'CLOSED').map((trade) => (
-                    <div key={trade.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Badge variant={trade.trade_type === 'BUY' ? 'default' : 'secondary'}>
-                          {trade.trade_type}
-                        </Badge>
-                        <div>
-                          <h4 className="font-semibold">{trade.symbol}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {formatNumber(trade.quantity)} @ {formatCurrency(trade.entry_price)}
-                          </p>
-                        </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                <TabsContent value="history" className="mt-2">
+                  <Card className="bg-[#2a2a2a] border-gray-700">
+                    <CardContent className="p-3">
+                      <div className="text-center text-gray-400 text-sm py-8">
+                        No trading history
                       </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${(trade.realized_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(trade.realized_pnl || 0)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {trade.exit_time ? new Date(trade.exit_time).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
