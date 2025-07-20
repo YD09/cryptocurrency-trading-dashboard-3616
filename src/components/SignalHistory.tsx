@@ -1,236 +1,280 @@
 import { useState, useEffect } from 'react';
-import { Bell, TrendingUp, TrendingDown, Clock, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Bell, TrendingUp, TrendingDown, Clock, DollarSign, AlertTriangle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface Signal {
   id: string;
+  strategyId: string;
   strategyName: string;
   symbol: string;
-  type: 'BUY' | 'SELL' | 'ALERT';
-  message: string;
-  timestamp: string;
-  price?: number;
-  status: 'active' | 'expired' | 'executed';
+  signal: 'BUY' | 'SELL';
+  price: number;
+  timestamp: Date;
+  executed: boolean;
+  profit?: number;
+  status: 'PENDING' | 'EXECUTED' | 'CANCELLED';
 }
 
 const SignalHistory = () => {
   const [signals, setSignals] = useState<Signal[]>([]);
-  const [filter, setFilter] = useState<string>('all');
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Mock signal data
   useEffect(() => {
-    const mockSignals: Signal[] = [
-      {
-        id: '1',
-        strategyName: 'Nifty Inside Candle',
-        symbol: 'NIFTY50',
-        type: 'ALERT',
-        message: 'Inside Candle pattern detected on NIFTY at 09:45 AM',
-        timestamp: '2024-01-15T09:45:00',
-        price: 21850.50,
-        status: 'active',
-      },
-      {
-        id: '2',
-        strategyName: 'Bank Nifty Breakout',
-        symbol: 'BANKNIFTY',
-        type: 'BUY',
-        message: 'Breakout above resistance level detected',
-        timestamp: '2024-01-15T10:15:00',
-        price: 46750.25,
-        status: 'executed',
-      },
-      {
-        id: '3',
-        strategyName: 'Reliance MA Cross',
-        symbol: 'RELIANCE',
-        type: 'SELL',
-        message: '20 EMA crossed below 50 EMA - Bearish signal',
-        timestamp: '2024-01-15T11:30:00',
-        price: 2850.75,
-        status: 'active',
-      },
-      {
-        id: '4',
-        strategyName: 'TCS Support Test',
-        symbol: 'TCS',
-        type: 'BUY',
-        message: 'Support level hold confirmed with volume',
-        timestamp: '2024-01-15T14:20:00',
-        price: 3950.30,
-        status: 'expired',
-      },
-      {
-        id: '5',
-        strategyName: 'Gold Momentum',
-        symbol: 'GOLD',
-        type: 'ALERT',
-        message: 'Strong momentum detected in Gold futures',
-        timestamp: '2024-01-15T15:45:00',
-        price: 65850.00,
-        status: 'active',
-      },
-    ];
-    setSignals(mockSignals);
+    loadSignals();
   }, []);
 
-  const filteredSignals = signals.filter(signal => {
-    if (filter === 'all') return true;
-    if (filter === 'buy') return signal.type === 'BUY';
-    if (filter === 'sell') return signal.type === 'SELL';
-    if (filter === 'alert') return signal.type === 'ALERT';
-    if (filter === 'active') return signal.status === 'active';
-    return true;
-  });
+  const loadSignals = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user found, using development mode');
+        // Load mock signals for development
+        const mockSignals: Signal[] = [
+          {
+            id: 'signal-1',
+            strategyId: 'strategy-1',
+            strategyName: 'BTC Breakout Strategy',
+            symbol: 'BTCUSD',
+            signal: 'BUY',
+            price: 43250.75,
+            timestamp: new Date(Date.now() - 3600000), // 1 hour ago
+            executed: true,
+            profit: 1250.50,
+            status: 'EXECUTED'
+          },
+          {
+            id: 'signal-2',
+            strategyId: 'strategy-2',
+            strategyName: 'ETH MA Crossover',
+            symbol: 'ETHUSD',
+            signal: 'SELL',
+            price: 2650.45,
+            timestamp: new Date(Date.now() - 7200000), // 2 hours ago
+            executed: false,
+            status: 'PENDING'
+          },
+          {
+            id: 'signal-3',
+            strategyId: 'strategy-3',
+            strategyName: 'Gold Support Breakout',
+            symbol: 'XAUUSD',
+            signal: 'BUY',
+            price: 2045.32,
+            timestamp: new Date(Date.now() - 10800000), // 3 hours ago
+            executed: true,
+            profit: -85.25,
+            status: 'EXECUTED'
+          }
+        ];
+        setSignals(mockSignals);
+        setLoading(false);
+        return;
+      }
 
-  const getSignalIcon = (type: string) => {
-    switch (type) {
-      case 'BUY':
-        return <TrendingUp className="h-4 w-4 text-success" />;
-      case 'SELL':
-        return <TrendingDown className="h-4 w-4 text-warning" />;
-      case 'ALERT':
-        return <Bell className="h-4 w-4 text-primary" />;
-      default:
-        return <Bell className="h-4 w-4" />;
+      // In production, load signals from database
+      const { data: signalsData } = await supabase
+        .from('signals')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false });
+
+      if (signalsData) {
+        const formattedSignals = signalsData.map(signal => ({
+          id: signal.id,
+          strategyId: signal.strategy_id,
+          strategyName: signal.strategy_name,
+          symbol: signal.symbol,
+          signal: signal.signal,
+          price: signal.price,
+          timestamp: new Date(signal.timestamp),
+          executed: signal.executed,
+          profit: signal.profit,
+          status: signal.status
+        }));
+        setSignals(formattedSignals);
+      }
+      setLoading(false);
+    } catch (error: any) {
+      console.error('Error loading signals:', error);
+      setLoading(false);
     }
   };
 
-  const getSignalColor = (type: string) => {
-    switch (type) {
-      case 'BUY':
-        return 'bg-success text-white';
-      case 'SELL':
-        return 'bg-warning text-white';
-      case 'ALERT':
-        return 'bg-primary text-white';
-      default:
-        return 'bg-muted';
+  const executeSignal = async (signalId: string) => {
+    try {
+      setSignals(prev => prev.map(signal => 
+        signal.id === signalId 
+          ? { ...signal, executed: true, status: 'EXECUTED' as const }
+          : signal
+      ));
+
+      toast({
+        title: "Signal Executed",
+        description: "Trading signal has been executed successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to execute signal",
+        variant: "destructive",
+      });
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const cancelSignal = async (signalId: string) => {
+    try {
+      setSignals(prev => prev.map(signal => 
+        signal.id === signalId 
+          ? { ...signal, status: 'CANCELLED' as const }
+          : signal
+      ));
+
+      toast({
+        title: "Signal Cancelled",
+        description: "Trading signal has been cancelled",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel signal",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getSignalIcon = (signal: 'BUY' | 'SELL') => {
+    return signal === 'BUY' ? 
+      <TrendingUp className="h-4 w-4 text-green-500" /> : 
+      <TrendingDown className="h-4 w-4 text-red-500" />;
+  };
+
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-success/20 text-success border-success/30';
-      case 'executed':
-        return 'bg-primary/20 text-primary border-primary/30';
-      case 'expired':
-        return 'bg-muted/20 text-muted-foreground border-muted/30';
+      case 'PENDING':
+        return <Badge variant="outline" className="text-yellow-500 border-yellow-500">Pending</Badge>;
+      case 'EXECUTED':
+        return <Badge variant="outline" className="text-green-500 border-green-500">Executed</Badge>;
+      case 'CANCELLED':
+        return <Badge variant="outline" className="text-red-500 border-red-500">Cancelled</Badge>;
       default:
-        return 'bg-muted/20 text-muted-foreground border-muted/30';
+        return <Badge variant="outline">Unknown</Badge>;
     }
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Kolkata',
-    });
+  const getProfitBadge = (profit?: number) => {
+    if (profit === undefined) return null;
+    return (
+      <Badge variant={profit >= 0 ? "default" : "destructive"}>
+        {profit >= 0 ? '+' : ''}{profit.toFixed(2)}%
+      </Badge>
+    );
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(price);
-  };
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Signal History</h2>
+          <p className="text-muted-foreground">Track all your trading signals and their performance</p>
+        </div>
+        <Card className="glass-card border-muted">
+          <CardContent className="p-8 text-center">
+            <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading signals...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Signal History</h2>
-          <p className="text-muted-foreground">Track your trading signals and alerts</p>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="w-40 bg-secondary/50 border-muted">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Signals</SelectItem>
-              <SelectItem value="buy">Buy Signals</SelectItem>
-              <SelectItem value="sell">Sell Signals</SelectItem>
-              <SelectItem value="alert">Alerts</SelectItem>
-              <SelectItem value="active">Active Only</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Signal History</h2>
+        <p className="text-muted-foreground">Track all your trading signals and their performance</p>
       </div>
 
       <div className="grid gap-4">
-        {filteredSignals.map((signal) => (
-          <Card key={signal.id} className="glass-card border-muted hover:border-primary/50 transition-colors">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="mt-1">
-                    {getSignalIcon(signal.type)}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+        {signals.length > 0 ? (
+          signals.map((signal) => (
+            <Card key={signal.id} className="glass-card border-muted">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      {getSignalIcon(signal.signal)}
                       <h3 className="font-semibold text-foreground">{signal.strategyName}</h3>
-                      <Badge className={getSignalColor(signal.type)}>
-                        {signal.type}
-                      </Badge>
                       <Badge variant="outline" className="border-muted text-muted-foreground">
                         {signal.symbol}
                       </Badge>
+                      {getStatusBadge(signal.status)}
+                      {getProfitBadge(signal.profit)}
                     </div>
                     
-                    <p className="text-foreground mb-3">{signal.message}</p>
-                    
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{formatTimestamp(signal.timestamp)}</span>
-                      </div>
-                      {signal.price && (
-                        <div className="font-medium text-foreground">
-                          {formatPrice(signal.price)}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Signal:</span>
+                        <div className={`font-medium ${signal.signal === 'BUY' ? 'text-green-500' : 'text-red-500'}`}>
+                          {signal.signal}
                         </div>
-                      )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Price:</span>
+                        <div className="font-mono">${signal.price.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Time:</span>
+                        <div className="text-xs">{signal.timestamp.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>
+                        <div className="font-medium">{signal.status}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <Badge variant="outline" className={getStatusColor(signal.status)}>
-                    {signal.status.charAt(0).toUpperCase() + signal.status.slice(1)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {signal.status === 'PENDING' && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => executeSignal(signal.id)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Execute
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => cancelSignal(signal.id)}
+                          className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card className="glass-card border-muted">
+            <CardContent className="p-8 text-center">
+              <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Signals Yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Trading signals will appear here when your strategies detect market opportunities
+              </p>
             </CardContent>
           </Card>
-        ))}
+        )}
       </div>
-
-      {filteredSignals.length === 0 && (
-        <Card className="glass-card border-muted">
-          <CardContent className="p-8 text-center">
-            <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No Signals Found</h3>
-            <p className="text-muted-foreground">
-              {filter === 'all' 
-                ? 'No trading signals have been generated yet' 
-                : `No signals found for the selected filter: ${filter}`
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

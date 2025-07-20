@@ -9,6 +9,8 @@ import { Search, TrendingUp, TrendingDown, Star, Menu, Bitcoin, DollarSign, Zap,
 import TradingChart from './TradingChart';
 import StockSearchBar from './StockSearchBar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { supabase, Trade, Portfolio } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface VirtualTradingProps {
   selectedSymbol: string;
@@ -26,7 +28,7 @@ interface Instrument {
   tradingViewSymbol: string;
 }
 
-interface Trade {
+interface TradeLocal {
   id: string;
   symbol: string;
   type: 'BUY' | 'SELL';
@@ -136,8 +138,10 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
   const [takeProfit, setTakeProfit] = useState('');
   const [portfolio, setPortfolio] = useState(mockPortfolio);
   const [instruments] = useState(allInstruments);
-  const [trades, setTrades] = useState<Trade[]>([]);
+  const [trades, setTrades] = useState<TradeLocal[]>([]);
+  const { toast } = useToast();
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  const [isProcessingTrade, setIsProcessingTrade] = useState(false);
 
   const filteredInstruments = instruments.filter(instrument =>
     instrument.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -146,6 +150,143 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
 
   const currentInstrument = instruments.find(i => i.tradingViewSymbol === activeSymbol) || instruments[0];
   const instrumentPrice = livePrices[activeSymbol] || currentPrice || currentInstrument.price;
+
+  // Load user data from Supabase
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // Reload user data after trade placement or close
+  const reloadUserData = async () => {
+    await loadUserData();
+  };
+
+  const loadUserData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('🔧 Development mode: No user found, using mock data');
+        // Load mock data for development
+        const mockTrades: TradeLocal[] = [
+          {
+            id: 'mock-trade-1',
+            symbol: 'BTCUSD',
+            type: 'BUY',
+            volume: 0.01,
+            openPrice: 43250.75,
+            currentPrice: 43250.75,
+            openTime: new Date(Date.now() - 3600000), // 1 hour ago
+            pnl: 125.50,
+            pnlPercent: 2.9,
+            status: 'OPEN'
+          },
+          {
+            id: 'mock-trade-2',
+            symbol: 'ETHUSD',
+            type: 'SELL',
+            volume: 0.02,
+            openPrice: 2650.45,
+            currentPrice: 2650.45,
+            openTime: new Date(Date.now() - 7200000), // 2 hours ago
+            pnl: -45.25,
+            pnlPercent: -1.7,
+            status: 'OPEN'
+          }
+        ];
+        setTrades(mockTrades);
+        console.log('✅ Development mode: Loaded mock trades');
+        return;
+      }
+
+      // Load portfolio
+      const { data: portfolioData } = await supabase
+        .from('portfolios')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (portfolioData) {
+        setPortfolio({
+          initialBalance: portfolioData.initialBalance,
+          balance: portfolioData.balance,
+          equity: portfolioData.equity,
+          margin: portfolioData.margin,
+          freeMargin: portfolioData.freeMargin,
+          marginLevel: portfolioData.marginLevel,
+          pnl: portfolioData.pnl,
+          totalProfit: portfolioData.totalProfit,
+          totalLoss: portfolioData.totalLoss
+        });
+        console.log('✅ Portfolio loaded:', portfolioData);
+      } else {
+        // Create default portfolio if none exists
+        const defaultPortfolio = {
+          user_id: user.id,
+          initialBalance: 10000,
+          balance: 10000,
+          equity: 10000,
+          margin: 0,
+          freeMargin: 10000,
+          marginLevel: 0,
+          pnl: 0,
+          totalProfit: 0,
+          totalLoss: 0
+        };
+        
+        const { data: newPortfolio } = await supabase
+          .from('portfolios')
+          .insert(defaultPortfolio)
+          .select()
+          .single();
+          
+        if (newPortfolio) {
+          setPortfolio({
+            initialBalance: newPortfolio.initialBalance,
+            balance: newPortfolio.balance,
+            equity: newPortfolio.equity,
+            margin: newPortfolio.margin,
+            freeMargin: newPortfolio.freeMargin,
+            marginLevel: newPortfolio.marginLevel,
+            pnl: newPortfolio.pnl,
+            totalProfit: newPortfolio.totalProfit,
+            totalLoss: newPortfolio.totalLoss
+          });
+          console.log('✅ Default portfolio created:', newPortfolio);
+        }
+      }
+
+      // Load trades
+      const { data: tradesData } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (tradesData) {
+        const formattedTrades = tradesData.map(trade => ({
+          id: trade.id,
+          symbol: trade.symbol,
+          type: trade.type,
+          volume: trade.volume,
+          openPrice: trade.openPrice,
+          currentPrice: trade.currentPrice,
+          openTime: new Date(trade.openTime),
+          closeTime: trade.closeTime ? new Date(trade.closeTime) : undefined,
+          pnl: trade.pnl,
+          pnlPercent: trade.pnlPercent,
+          status: trade.status,
+          stopLoss: trade.stopLoss,
+          takeProfit: trade.takeProfit,
+          closePrice: trade.closePrice,
+          finalPnl: trade.finalPnl
+        }));
+        setTrades(formattedTrades);
+        console.log('✅ Trades loaded:', formattedTrades.length, 'trades');
+      }
+    } catch (error: any) {
+      console.error('❌ Error loading user data:', error);
+    }
+  };
 
   // Simulate live price updates
   useEffect(() => {
@@ -199,39 +340,132 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
     setActiveSymbol(selectedSymbol);
   };
 
-  const handlePlaceTrade = () => {
-    const volumeNum = parseFloat(volume);
-    const tradeValue = calculateTradeValue();
+  const handlePlaceTrade = async () => {
+    setIsProcessingTrade(true);
     
-    if (tradeValue > portfolio.freeMargin) {
-      alert('Insufficient margin for this trade');
-      return;
+    try {
+      const volumeNum = parseFloat(volume);
+      
+      if (volumeNum <= 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid volume",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const tradeValue = calculateTradeValue();
+      
+      if (tradeValue > portfolio.freeMargin) {
+        toast({
+          title: "Error",
+          description: "Insufficient margin for this trade",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create new trade immediately (no database dependency for now)
+      const newTrade: TradeLocal = {
+        id: 'trade-' + Date.now(),
+        symbol: currentInstrument.symbol,
+        type: tradeType,
+        volume: volumeNum,
+        openPrice: instrumentPrice,
+        currentPrice: instrumentPrice,
+        openTime: new Date(),
+        pnl: 0,
+        pnlPercent: 0,
+        status: 'OPEN'
+      };
+
+      // Add trade to local state immediately
+      setTrades(prev => [newTrade, ...prev]);
+      console.log('✅ Trade placed successfully:', newTrade);
+      
+      // Update portfolio immediately
+      const updatedPortfolio = {
+        ...portfolio,
+        freeMargin: portfolio.freeMargin - tradeValue,
+        margin: portfolio.margin + tradeValue
+      };
+      setPortfolio(updatedPortfolio);
+
+      // Try to save to database in background (don't block UI)
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: tradeError } = await supabase
+            .from('trades')
+            .insert({
+              user_id: user.id,
+              symbol: currentInstrument.symbol,
+              type: tradeType,
+              volume: volumeNum,
+              openPrice: instrumentPrice,
+              currentPrice: instrumentPrice,
+              openTime: new Date().toISOString(),
+              pnl: 0,
+              pnlPercent: 0,
+              status: 'OPEN'
+            }) as any;
+
+          if (tradeError) {
+            console.warn('⚠️ Database save failed (but trade placed):', tradeError);
+          } else {
+            console.log('✅ Trade saved to database');
+          }
+
+          // Update portfolio in database
+          const { error: portfolioError } = await supabase
+            .from('portfolios')
+            .upsert({
+              user_id: user.id,
+              initialBalance: updatedPortfolio.initialBalance,
+              balance: updatedPortfolio.balance,
+              equity: updatedPortfolio.equity,
+              margin: updatedPortfolio.margin,
+              freeMargin: updatedPortfolio.freeMargin,
+              marginLevel: updatedPortfolio.marginLevel,
+              pnl: updatedPortfolio.pnl,
+              totalProfit: updatedPortfolio.totalProfit,
+              totalLoss: updatedPortfolio.totalLoss
+            });
+
+          if (portfolioError) {
+            console.warn('⚠️ Portfolio update failed:', portfolioError);
+          } else {
+            console.log('✅ Portfolio updated in database');
+          }
+        }
+      } catch (dbError) {
+        console.warn('⚠️ Database operation failed (but trade placed):', dbError);
+      }
+
+      toast({
+        title: "Trade Placed Successfully",
+        description: `${tradeType} order placed: ${volume} lots of ${currentInstrument.symbol} at ${formatPrice(instrumentPrice, activeSymbol)}`,
+      });
+
+      // Reset form
+      setVolume('0.01');
+      setStopLoss('');
+      setTakeProfit('');
+      
+      // Reload from database to ensure latest state
+      await reloadUserData();
+
+    } catch (error: any) {
+      console.error('Trade placement error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to place trade. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingTrade(false);
     }
-
-    // Create new trade
-    const newTrade: Trade = {
-      id: Date.now().toString(),
-      symbol: currentInstrument.symbol,
-      type: tradeType,
-      volume: volumeNum,
-      openPrice: instrumentPrice,
-      currentPrice: instrumentPrice,
-      openTime: new Date(),
-      pnl: 0,
-      pnlPercent: 0,
-      status: 'OPEN'
-    };
-
-    setTrades(prev => [...prev, newTrade]);
-    
-    // Update portfolio
-    setPortfolio(prev => ({
-      ...prev,
-      freeMargin: prev.freeMargin - tradeValue,
-      margin: prev.margin + tradeValue
-    }));
-
-    alert(`${tradeType} order placed: ${volume} lots of ${currentInstrument.symbol} at ${formatPrice(instrumentPrice, activeSymbol)}`);
   };
 
   // Update PnL for open trades with live prices
@@ -298,40 +532,104 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
   };
 
   // Trade management functions
-  const handleSellPosition = (tradeId: string) => {
+  const handleSellPosition = async (tradeId: string) => {
     const trade = trades.find(t => t.id === tradeId);
     if (!trade) return;
 
-    const closePrice = instrumentPrice;
-    const priceDiff = closePrice - trade.openPrice;
-    const finalPnl = trade.type === 'BUY' ? priceDiff : -priceDiff;
-    const finalPnlValue = finalPnl * trade.volume * getLotSize(activeSymbol);
+    try {
+      const closePrice = instrumentPrice;
+      const priceDiff = closePrice - trade.openPrice;
+      const finalPnl = trade.type === 'BUY' ? priceDiff : -priceDiff;
+      const finalPnlValue = finalPnl * trade.volume * getLotSize(activeSymbol);
 
-    // Update trade with close details
-    setTrades(prev => prev.map(t => 
-      t.id === tradeId ? { 
-        ...t, 
-        status: 'CLOSED',
-        closeTime: new Date(),
-        closePrice: closePrice,
-        finalPnl: finalPnlValue
-      } : t
-    ));
+      // Update trade immediately
+      setTrades(prev => prev.map(t => 
+        t.id === tradeId ? { 
+          ...t, 
+          status: 'CLOSED',
+          closeTime: new Date(),
+          closePrice: closePrice,
+          finalPnl: finalPnlValue
+        } : t
+      ));
 
-    // Update portfolio balance
-    setPortfolio(prev => ({
-      ...prev,
-      balance: prev.balance + finalPnlValue,
-      freeMargin: prev.freeMargin + (trade.volume * getLotSize(activeSymbol) * trade.openPrice),
-      margin: prev.margin - (trade.volume * getLotSize(activeSymbol) * trade.openPrice),
-      totalProfit: finalPnlValue > 0 ? prev.totalProfit + finalPnlValue : prev.totalProfit,
-      totalLoss: finalPnlValue < 0 ? prev.totalLoss + Math.abs(finalPnlValue) : prev.totalLoss
-    }));
+      // Update portfolio immediately
+      const updatedPortfolio = {
+        ...portfolio,
+        balance: portfolio.balance + finalPnlValue,
+        freeMargin: portfolio.freeMargin + (trade.volume * getLotSize(activeSymbol) * trade.openPrice),
+        margin: portfolio.margin - (trade.volume * getLotSize(activeSymbol) * trade.openPrice),
+        totalProfit: finalPnlValue > 0 ? portfolio.totalProfit + finalPnlValue : portfolio.totalProfit,
+        totalLoss: finalPnlValue < 0 ? portfolio.totalLoss + Math.abs(finalPnlValue) : portfolio.totalLoss
+      };
+      setPortfolio(updatedPortfolio);
 
-    alert(`Position closed: ${finalPnlValue >= 0 ? 'Profit' : 'Loss'} ${formatCurrency(Math.abs(finalPnlValue))}`);
+      console.log('✅ Trade closed successfully:', tradeId, 'P&L:', finalPnlValue);
+
+      // Try to update database in background
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: tradeError } = await supabase
+            .from('trades')
+            .update({
+              status: 'CLOSED',
+              closeTime: new Date().toISOString(),
+              closePrice: closePrice,
+              finalPnl: finalPnlValue
+            })
+            .eq('id', tradeId) as any;
+
+          if (tradeError) {
+            console.warn('⚠️ Database trade close failed:', tradeError);
+          } else {
+            console.log('✅ Trade closed in database');
+          }
+
+          // Update portfolio in database
+          const { error: portfolioError } = await supabase
+            .from('portfolios')
+            .upsert({
+              user_id: user.id,
+              initialBalance: updatedPortfolio.initialBalance,
+              balance: updatedPortfolio.balance,
+              equity: updatedPortfolio.equity,
+              margin: updatedPortfolio.margin,
+              freeMargin: updatedPortfolio.freeMargin,
+              marginLevel: updatedPortfolio.marginLevel,
+              pnl: updatedPortfolio.pnl,
+              totalProfit: updatedPortfolio.totalProfit,
+              totalLoss: updatedPortfolio.totalLoss
+            }) as any;
+
+          if (portfolioError) {
+            console.warn('⚠️ Database portfolio update failed:', portfolioError);
+          } else {
+            console.log('✅ Portfolio updated in database');
+          }
+        }
+      } catch (dbError) {
+        console.warn('⚠️ Database operation failed (but trade closed):', dbError);
+      }
+
+      toast({
+        title: "Position Closed",
+        description: `${finalPnlValue >= 0 ? 'Profit' : 'Loss'} ${formatCurrency(Math.abs(finalPnlValue))}`,
+      });
+
+      // Reload from database to ensure latest state
+      await reloadUserData();
+    } catch (error: any) {
+      console.error('Position close error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to close position. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleBuyMore = (trade: Trade) => {
+  const handleBuyMore = (trade: TradeLocal) => {
     const additionalVolume = parseFloat(volume);
     const tradeValue = additionalVolume * getLotSize(activeSymbol) * instrumentPrice;
     
@@ -376,20 +674,21 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
       <div className="h-16 bg-[#1a1a1a] border-b border-gray-800 flex items-center justify-between px-6">
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold text-white">Global Trading Platform</h1>
-          
+          {/* Development Mode Indicator */}
+          <div className="px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-xs text-yellow-400 flex items-center gap-1">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+            DEV MODE
+          </div>
           {/* Search Bar */}
-          <div className="relative w-80">
+          <div className="relative w-80 ml-8 mr-8"> {/* Added margin for spacing */}
             <StockSearchBar onSymbolSelect={handleSymbolSelect} />
           </div>
         </div>
-        
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-8 text-sm"> {/* Increased gap for more space */}
           <span className="text-green-400">Balance: {formatCurrency(portfolio.balance)}</span>
           <span className="text-blue-400">Initial: {formatCurrency(portfolio.initialBalance)}</span>
-          <span className="text-yellow-400">Free Margin: {formatCurrency(portfolio.freeMargin)}</span>
-          <span className={`${portfolio.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            Live P&L: {formatCurrency(portfolio.pnl)}
-          </span>
+          {/* Removed Free Margin block */}
+          <span className={`${portfolio.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>Live P&L: {formatCurrency(portfolio.pnl)}</span>
           <span className="text-green-400">Total Profit: {formatCurrency(portfolio.totalProfit)}</span>
           <span className="text-red-400">Total Loss: {formatCurrency(portfolio.totalLoss)}</span>
         </div>
@@ -573,8 +872,16 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                       ? 'bg-green-600 hover:bg-green-700' 
                       : 'bg-red-600 hover:bg-red-700'
                   } text-white font-semibold`}
+                  disabled={isProcessingTrade}
                 >
-                  {tradeType} {currentInstrument.symbol}
+                  {isProcessingTrade ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                      Placing...
+                    </div>
+                  ) : (
+                    `${tradeType} ${currentInstrument.symbol}`
+                  )}
                 </Button>
               </div>
             </div>
@@ -608,18 +915,12 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   {trades.filter(t => t.status === 'OPEN').map((trade) => (
                     <div key={trade.id} className="grid grid-cols-8 gap-4 text-sm py-2 border-b border-gray-800">
                       <div className="font-medium">{trade.symbol}</div>
-                      <div className={`font-medium ${trade.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.type}
-                      </div>
+                      <div className={`font-medium ${trade.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{trade.type}</div>
                       <div>{trade.volume}</div>
                       <div className="font-mono">{formatPrice(trade.openPrice, trade.symbol)}</div>
                       <div className="font-mono">{formatPrice(trade.currentPrice, trade.symbol)}</div>
-                      <div className={`font-mono ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {formatCurrency(trade.pnl)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {trade.openTime.toLocaleTimeString()}
-                      </div>
+                      <div className={`font-mono ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCurrency(trade.pnl)}</div>
+                      <div className="text-xs text-gray-400">{trade.openTime.toLocaleTimeString()}</div>
                       <div className="flex items-center justify-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -627,20 +928,20 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => handleSellPosition(trade.id)}>
+                          <DropdownMenuContent align="end" className="w-48 glass-card border-muted backdrop-blur-md bg-background/80">
+                            <DropdownMenuItem onClick={() => handleSellPosition(trade.id)} className="hover:bg-muted/50">
                               <Minus className="h-4 w-4 mr-2 text-red-400" />
                               Sell Position
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleBuyMore(trade)}>
+                            <DropdownMenuItem onClick={() => handleBuyMore(trade)} className="hover:bg-muted/50">
                               <Plus className="h-4 w-4 mr-2 text-green-400" />
                               Buy More
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleAddStopLoss(trade.id, instrumentPrice * 0.95)}>
+                            <DropdownMenuItem onClick={() => handleAddStopLoss(trade.id, instrumentPrice * 0.95)} className="hover:bg-muted/50">
                               <AlertTriangle className="h-4 w-4 mr-2 text-orange-400" />
                               Add Stop Loss
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleAddTakeProfit(trade.id, instrumentPrice * 1.05)}>
+                            <DropdownMenuItem onClick={() => handleAddTakeProfit(trade.id, instrumentPrice * 1.05)} className="hover:bg-muted/50">
                               <Target className="h-4 w-4 mr-2 text-blue-400" />
                               Add Take Profit
                             </DropdownMenuItem>
@@ -658,14 +959,14 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
               )}
             </div>
           </TabsContent>
-          
+
           <TabsContent value="pending" className="mt-0 h-full">
             <div className="flex items-center justify-center h-full text-gray-400">
               <Clock className="h-8 w-8 mr-2" />
               No pending orders
             </div>
           </TabsContent>
-          
+
           <TabsContent value="history" className="mt-0 h-full">
             <div className="h-full overflow-y-auto">
               {trades.filter(t => t.status === 'CLOSED').length > 0 ? (
@@ -683,21 +984,13 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   {trades.filter(t => t.status === 'CLOSED').map((trade) => (
                     <div key={trade.id} className="grid grid-cols-8 gap-4 text-sm py-2 border-b border-gray-800">
                       <div className="font-medium">{trade.symbol}</div>
-                      <div className={`font-medium ${trade.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.type}
-                      </div>
+                      <div className={`font-medium ${trade.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{trade.type}</div>
                       <div>{trade.volume}</div>
                       <div className="font-mono">{formatPrice(trade.openPrice, trade.symbol)}</div>
                       <div className="font-mono">{formatPrice(trade.closePrice || 0, trade.symbol)}</div>
-                      <div className={`font-mono ${trade.finalPnl && trade.finalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.finalPnl ? formatCurrency(trade.finalPnl) : '$0.00'}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {trade.openTime.toLocaleTimeString()}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {trade.closeTime ? trade.closeTime.toLocaleTimeString() : '-'}
-                      </div>
+                      <div className={`font-mono ${trade.finalPnl && trade.finalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{trade.finalPnl ? formatCurrency(trade.finalPnl) : '$0.00'}</div>
+                      <div className="text-xs text-gray-400">{trade.openTime.toLocaleTimeString()}</div>
+                      <div className="text-xs text-gray-400">{trade.closeTime ? trade.closeTime.toLocaleTimeString() : '-'}</div>
                     </div>
                   ))}
                 </div>

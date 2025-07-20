@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Play, Pause, Trash2, Bell, TrendingUp } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, Bell, TrendingUp, Save, Search, Code, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,17 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-
-interface Strategy {
-  id: string;
-  name: string;
-  symbol: string;
-  type: 'inside_candle' | 'ma_crossover' | 'breakout' | 'custom';
-  conditions: string;
-  enabled: boolean;
-  lastSignal?: string;
-  signalCount: number;
-}
+import { supabase, Strategy } from '@/lib/supabase';
+import StockSearchBar from './StockSearchBar';
+import { checkAndSendSignals } from '@/lib/notifications';
 
 const StrategyManager = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -29,38 +21,53 @@ const StrategyManager = () => {
     type: 'inside_candle' as const,
     conditions: '',
     enabled: true,
+    pineScript: '', // Add Pine Script field
   });
+  const [wordCount, setWordCount] = useState(0);
+  const [showSymbolSearch, setShowSymbolSearch] = useState(false);
+  const [showPineScript, setShowPineScript] = useState(false); // Add toggle for Pine Script
   const { toast } = useToast();
 
-  // Mock data for demonstration
+  // Load strategies from Supabase
   useEffect(() => {
-    const mockStrategies: Strategy[] = [
-      {
-        id: '1',
-        name: 'Nifty Inside Candle',
-        symbol: 'NIFTY50',
-        type: 'inside_candle',
-        conditions: 'Detect inside candle pattern on daily timeframe',
-        enabled: true,
-        lastSignal: '2024-01-15 09:45:00',
-        signalCount: 5,
-      },
-      {
-        id: '2',
-        name: 'Bank Nifty MA Cross',
-        symbol: 'BANKNIFTY',
-        type: 'ma_crossover',
-        conditions: '20 EMA crosses above 50 EMA on 15min timeframe',
-        enabled: false,
-        signalCount: 3,
-      },
-    ];
-    setStrategies(mockStrategies);
+    loadStrategies();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Monitor strategies for signals
+  useEffect(() => {
+    const signalInterval = setInterval(async () => {
+      if (strategies.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await checkAndSendSignals(strategies, user.email || 'dev@example.com');
+        }
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(signalInterval);
+  }, [strategies]);
+
+  const loadStrategies = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('strategies')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setStrategies(data || []);
+    } catch (error: any) {
+      console.error('Error loading strategies:', error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStrategy.name || !newStrategy.symbol) {
+    if (!newStrategy.name || !newStrategy.symbol || !newStrategy.conditions) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -69,40 +76,110 @@ const StrategyManager = () => {
       return;
     }
 
-    const strategy: Strategy = {
-      id: Date.now().toString(),
-      ...newStrategy,
-      signalCount: 0,
-    };
+    if (wordCount > 100) {
+      toast({
+        title: "Error",
+        description: "Strategy description must be 100 words or less",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    setStrategies([...strategies, strategy]);
-    setNewStrategy({
-      name: '',
-      symbol: '',
-      type: 'inside_candle',
-      conditions: '',
-      enabled: true,
-    });
-    setShowForm(false);
-    
-    toast({
-      title: "Strategy Created",
-      description: `${strategy.name} has been added successfully`,
-    });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "Please sign in to create strategies",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('strategies')
+        .insert({
+          user_id: user.id,
+          name: newStrategy.name,
+          symbol: newStrategy.symbol,
+          type: newStrategy.type,
+          conditions: newStrategy.conditions,
+          enabled: newStrategy.enabled,
+          signalCount: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setStrategies([data, ...strategies]);
+      setNewStrategy({
+        name: '',
+        symbol: '',
+        type: 'inside_candle',
+        conditions: '',
+        enabled: true,
+        pineScript: '',
+      });
+      setWordCount(0);
+      setShowForm(false);
+      
+      toast({
+        title: "Strategy Created",
+        description: `${data.name} has been added successfully`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const toggleStrategy = (id: string) => {
-    setStrategies(strategies.map(s => 
-      s.id === id ? { ...s, enabled: !s.enabled } : s
-    ));
+  const toggleStrategy = async (id: string) => {
+    try {
+      const updatedStrategies = strategies.map(s => 
+        s.id === id ? { ...s, enabled: !s.enabled } : s
+      );
+      setStrategies(updatedStrategies);
+
+      const { error } = await supabase
+        .from('strategies')
+        .update({ enabled: !strategies.find(s => s.id === id)?.enabled })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const deleteStrategy = (id: string) => {
-    setStrategies(strategies.filter(s => s.id !== id));
-    toast({
-      title: "Strategy Deleted",
-      description: "Strategy has been removed successfully",
-    });
+  const deleteStrategy = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('strategies')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setStrategies(strategies.filter(s => s.id !== id));
+      toast({
+        title: "Strategy Deleted",
+        description: "Strategy has been removed successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const getStrategyTypeLabel = (type: string) => {
@@ -111,8 +188,14 @@ const StrategyManager = () => {
       case 'ma_crossover': return 'MA Crossover';
       case 'breakout': return 'Breakout';
       case 'custom': return 'Custom';
+      case 'saved': return 'Saved Strategy';
       default: return type;
     }
+  };
+
+  const handleSymbolSelect = (selectedSymbol: string) => {
+    setNewStrategy({ ...newStrategy, symbol: selectedSymbol });
+    setShowSymbolSearch(false);
   };
 
   const getStrategyTypeColor = (type: string) => {
@@ -121,9 +204,55 @@ const StrategyManager = () => {
       case 'ma_crossover': return 'bg-success';
       case 'breakout': return 'bg-warning';
       case 'custom': return 'bg-accent';
+      case 'saved': return 'bg-purple-500';
       default: return 'bg-muted';
     }
   };
+
+  const handleConditionsChange = (value: string) => {
+    setNewStrategy({ ...newStrategy, conditions: value });
+    const words = value.trim().split(/\s+/).filter(word => word.length > 0);
+    setWordCount(words.length);
+  };
+
+  const predefinedStrategies = [
+    {
+      name: 'Inside Candle Pattern',
+      code: `// Inside Candle Strategy
+if (high[1] < high[2] && low[1] > low[2]) {
+  // Inside candle detected
+  if (close > high[1]) {
+    buy(); // Breakout above inside candle
+  } else if (close < low[1]) {
+    sell(); // Breakdown below inside candle
+  }
+}`
+    },
+    {
+      name: 'Moving Average Crossover',
+      code: `// MA Crossover Strategy
+ema20 = ema(close, 20);
+ema50 = ema(close, 50);
+
+if (crossover(ema20, ema50)) {
+  buy(); // Golden cross
+} else if (crossunder(ema20, ema50)) {
+  sell(); // Death cross
+}`
+    },
+    {
+      name: 'Support Resistance Breakout',
+      code: `// Support/Resistance Breakout
+resistance = highest(high, 20);
+support = lowest(low, 20);
+
+if (close > resistance) {
+  buy(); // Resistance breakout
+} else if (close < support) {
+  sell(); // Support breakdown
+}`
+    }
+  ];
 
   return (
     <div className="space-y-6">
@@ -164,12 +293,29 @@ const StrategyManager = () => {
                   <label className="text-sm font-medium text-foreground mb-2 block">
                     Symbol
                   </label>
-                  <Input
-                    value={newStrategy.symbol}
-                    onChange={(e) => setNewStrategy({ ...newStrategy, symbol: e.target.value })}
-                    placeholder="e.g., NIFTY50, RELIANCE"
-                    className="bg-secondary/50 border-muted"
-                  />
+                  <div className="relative">
+                    <Input
+                      value={newStrategy.symbol}
+                      onChange={(e) => setNewStrategy({ ...newStrategy, symbol: e.target.value })}
+                      onFocus={() => setShowSymbolSearch(true)}
+                      placeholder="Search crypto, forex, stocks..."
+                      className="bg-secondary/50 border-muted pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowSymbolSearch(!showSymbolSearch)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                    >
+                      <Search className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {showSymbolSearch && (
+                    <div className="absolute z-50 w-full mt-1">
+                      <StockSearchBar onSymbolSelect={handleSymbolSelect} />
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -189,20 +335,82 @@ const StrategyManager = () => {
                     <SelectItem value="ma_crossover">Moving Average Crossover</SelectItem>
                     <SelectItem value="breakout">Breakout Strategy</SelectItem>
                     <SelectItem value="custom">Custom Strategy</SelectItem>
+                    {strategies.length > 0 && (
+                      <SelectItem value="saved" disabled>
+                        -- Saved Strategies --
+                      </SelectItem>
+                    )}
+                    {strategies.map((strategy) => (
+                      <SelectItem key={strategy.id} value={`saved_${strategy.id}`}>
+                        📋 {strategy.name} ({strategy.symbol})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">
-                  Strategy Conditions
+                  Strategy Conditions <span className="text-muted-foreground">({wordCount}/100 words)</span>
                 </label>
                 <Textarea
                   value={newStrategy.conditions}
-                  onChange={(e) => setNewStrategy({ ...newStrategy, conditions: e.target.value })}
+                  onChange={(e) => handleConditionsChange(e.target.value)}
                   placeholder="Describe your strategy conditions..."
-                  className="bg-secondary/50 border-muted h-24"
+                  className={`bg-secondary/50 border-muted h-24 ${wordCount > 100 ? 'border-red-500' : ''}`}
                 />
+                {wordCount > 100 && (
+                  <p className="text-sm text-red-500 mt-1">
+                    Strategy description must be 100 words or less
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Pine Script Code
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowPineScript(!showPineScript)}
+                    className="text-xs"
+                  >
+                    <Code className="h-3 w-3 mr-1" />
+                    {showPineScript ? 'Hide' : 'Show'} Code
+                  </Button>
+                </div>
+                {showPineScript && (
+                  <>
+                    <Textarea
+                      value={newStrategy.pineScript}
+                      onChange={(e) => setNewStrategy({ ...newStrategy, pineScript: e.target.value })}
+                      placeholder="Enter your Pine Script code here..."
+                      className="bg-secondary/50 border-muted h-32 font-mono text-sm"
+                    />
+                    <div className="mt-2">
+                      <label className="text-sm font-medium text-foreground mb-2 block">
+                        Quick Templates
+                      </label>
+                      <div className="grid gap-2">
+                        {predefinedStrategies.map((template, index) => (
+                          <Button
+                            key={index}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setNewStrategy({ ...newStrategy, pineScript: template.code })}
+                            className="justify-start text-left border-muted hover:bg-muted/50"
+                          >
+                            {template.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center space-x-2">
@@ -214,7 +422,7 @@ const StrategyManager = () => {
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" className="bg-primary hover:bg-primary/90">
+                <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={wordCount > 100}>
                   Create Strategy
                 </Button>
                 <Button 
