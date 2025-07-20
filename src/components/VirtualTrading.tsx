@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Search, TrendingUp, TrendingDown, Star, Menu, Bitcoin, DollarSign, Zap, BarChart3, Clock, DollarSign as DollarIcon, MoreVertical, Plus, Minus, Target, AlertTriangle } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, Star, Menu, Bitcoin, DollarSign, Zap, BarChart3, Clock, DollarSign as DollarIcon, MoreVertical, Plus, Minus, Target, AlertTriangle, Info } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import TradingChart from './TradingChart';
 import StockSearchBar from './StockSearchBar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -142,6 +143,64 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
   const { toast } = useToast();
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const [isProcessingTrade, setIsProcessingTrade] = useState(false);
+  const [leverage, setLeverage] = useState(1);
+  const leveragePresets = [1, 25, 50, 75, 100, 125, 200, 500, 1000];
+
+  // Helper: get quote currency (for pip value)
+  const getQuoteCurrency = (symbol: string) => {
+    if (symbol.includes('USD')) return 'USD';
+    if (symbol.includes('JPY')) return 'JPY';
+    return 'USD';
+  };
+
+  // Helper: get base currency (for pip value)
+  const getBaseCurrency = (symbol: string) => {
+    if (symbol.length >= 6) return symbol.slice(0, 3);
+    return symbol;
+  };
+
+  // Calculate units (for forex, 1 lot = 100,000 units)
+  const getUnits = () => {
+    const volumeNum = parseFloat(volume || '0');
+    if (activeSymbol.includes('FX:')) return volumeNum * 100000;
+    if (activeSymbol.includes('BINANCE:')) return volumeNum * 1;
+    if (activeSymbol.includes('NASDAQ:') || activeSymbol.includes('NYSE:')) return volumeNum * 100;
+    return volumeNum;
+  };
+
+  // Margin required (industry standard)
+  const getMarginRequired = () => {
+    const units = getUnits();
+    return (units * instrumentPrice) / leverage;
+  };
+
+  // Fee (industry standard: 0.05% for forex, 0.1% for crypto/stocks)
+  const getFee = () => {
+    const tradeValue = getUnits() * instrumentPrice;
+    if (activeSymbol.includes('FX:')) return tradeValue * 0.0005;
+    return tradeValue * 0.001;
+  };
+
+  // Max loss (margin at risk)
+  const getMaxLoss = () => getMarginRequired();
+
+  // Pip value (for forex)
+  const getPipValue = () => {
+    if (!activeSymbol.includes('FX:')) return 0;
+    const units = getUnits();
+    const pip = activeSymbol.includes('JPY') ? 0.01 : 0.0001;
+    return (pip * units) / instrumentPrice;
+  };
+
+  // Trade value (for display, does NOT change with leverage)
+  const calculateTradeValue = () => getUnits() * instrumentPrice;
+
+  // P&L calculation (industry standard, with leverage)
+  const calculatePnl = (openPrice: number, currentPrice: number, type: 'BUY' | 'SELL') => {
+    const units = getUnits();
+    const direction = type === 'BUY' ? 1 : -1;
+    return (currentPrice - openPrice) * units * direction * leverage;
+  };
 
   const filteredInstruments = instruments.filter(instrument =>
     instrument.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -324,16 +383,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
     if (symbol.includes('FX:')) return 100000; // Forex: 100k units (standard lot)
     if (symbol.includes('NASDAQ:') || symbol.includes('NYSE:')) return 100; // Stocks: 100 shares
     return 1; // Default
-  };
-
-  // Calculate trade value with proper lot size and volume
-  const calculateTradeValue = () => {
-    const volumeNum = parseFloat(volume || '0');
-    const lotSize = getLotSize(activeSymbol);
-    // For forex, 1 lot = 100,000 units, but we want to show realistic values
-    // So we'll use a smaller multiplier for display purposes
-    const displayMultiplier = activeSymbol.includes('FX:') ? 1000 : lotSize;
-    return volumeNum * displayMultiplier * instrumentPrice;
   };
 
   const handleSymbolSelect = (selectedSymbol: string) => {
@@ -789,7 +838,7 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
           </div>
 
           {/* Trading Panel - Horizontal Layout */}
-          <div className="h-32 bg-[#1a1a1a] border-t border-gray-800 p-4">
+          <div className="h-32 bg-[#1a1a1a] border-t border-gray-800 p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between h-full">
               {/* Left Side - Symbol Info */}
               <div className="flex items-center gap-6">
@@ -797,7 +846,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   <h3 className="text-lg font-semibold text-white">{formatSymbolForDisplay(activeSymbol)}</h3>
                   <div className="text-2xl font-mono text-white">{formatPrice(instrumentPrice, activeSymbol)}</div>
                 </div>
-                
                 {/* Buy/Sell Buttons */}
                 <div className="flex gap-2">
                   <Button
@@ -816,7 +864,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   </Button>
                 </div>
               </div>
-
               {/* Center - Trading Inputs */}
               <div className="flex items-center gap-4">
                 <div>
@@ -830,7 +877,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                     className="bg-[#2a2a2a] border-gray-600 text-white w-24"
                   />
                 </div>
-                
                 <div>
                   <label className="text-sm text-gray-400 block mb-1">Take Profit</label>
                   <Input
@@ -842,7 +888,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                     className="bg-[#2a2a2a] border-gray-600 text-white placeholder-gray-500 w-24"
                   />
                 </div>
-                
                 <div>
                   <label className="text-sm text-gray-400 block mb-1">Stop Loss</label>
                   <Input
@@ -855,7 +900,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   />
                 </div>
               </div>
-
               {/* Right Side - Trade Button and Value */}
               <div className="flex items-center gap-4">
                 <div className="text-right">
@@ -864,7 +908,6 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                     {formatCurrency(calculateTradeValue())}
                   </div>
                 </div>
-                
                 <Button
                   onClick={handlePlaceTrade}
                   className={`px-8 py-3 ${
@@ -884,6 +927,51 @@ export const VirtualTrading = ({ selectedSymbol, currentPrice = 0 }: VirtualTrad
                   )}
                 </Button>
               </div>
+            </div>
+            {/* Leverage Selector */}
+            <div className="flex items-center gap-4 mt-2">
+              <label className="text-sm text-gray-400 flex items-center gap-1">
+                Leverage
+                <span title="Leverage multiplies your exposure and risk. Higher leverage = higher risk."><Info className="h-4 w-4" /></span>
+              </label>
+              <button onClick={() => setLeverage(Math.max(1, leverage - 1))} className="px-2 py-1 bg-gray-700 rounded">-</button>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={leverage}
+                onChange={e => setLeverage(Math.max(1, Math.min(1000, Number(e.target.value))))}
+                className="w-16 text-center bg-[#222] border border-gray-600 rounded"
+              />
+              <span className="text-lg font-bold">×</span>
+              <button onClick={() => setLeverage(Math.min(1000, leverage + 1))} className="px-2 py-1 bg-gray-700 rounded">+</button>
+              <Slider
+                min={1}
+                max={1000}
+                step={1}
+                value={[leverage]}
+                onValueChange={([val]) => setLeverage(val)}
+                className="w-64 mx-4"
+              />
+              {leveragePresets.map(val => (
+                <button
+                  key={val}
+                  onClick={() => setLeverage(val)}
+                  className={`px-2 py-1 rounded ${leverage === val ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}
+                >
+                  {val}x
+                </button>
+              ))}
+            </div>
+            {/* Trade Summary Block */}
+            <div className="mt-2 p-3 bg-[#181818] rounded flex gap-8 items-center text-xs border border-gray-700">
+              <div title="Lots"><b>L</b>: {volume}</div>
+              <div title="Currency"><b>Cur</b>: {getBaseCurrency(currentInstrument.symbol)}</div>
+              <div title="Units"><b>U</b>: {getUnits().toLocaleString()}</div>
+              <div title="Margin Required"><b>M</b>: {formatCurrency(getMarginRequired())}</div>
+              <div title="Fee (per side)"><b>F</b>: {formatCurrency(getFee())}</div>
+              <div title="Max Loss (margin at risk)"><b>ML</b>: {formatCurrency(getMaxLoss())}</div>
+              <div title="Pip Value"><b>Pip</b>: {getPipValue() ? formatCurrency(getPipValue()) : '-'}</div>
             </div>
           </div>
         </div>
