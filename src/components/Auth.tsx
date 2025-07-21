@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { isEmailConfigured } from '@/lib/email';
 import { isSMSConfigured } from '@/lib/sms';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 interface AuthProps {
   onAuthSuccess: () => void;
@@ -22,6 +23,9 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
+  const [showForgotDialog, setShowForgotDialog] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
   const { toast } = useToast();
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -191,6 +195,46 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
+      // Supabase will redirect on success
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsForgotLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail);
+      if (error) throw error;
+      toast({
+        title: 'Password Reset Email Sent',
+        description: 'Check your email for a password reset link.',
+      });
+      setShowForgotDialog(false);
+      setForgotEmail('');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md glass-card border-muted">
@@ -270,6 +314,15 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
                       )}
                     </Button>
                   </div>
+                  <div className="flex justify-end mt-1">
+                    <button
+                      type="button"
+                      className="text-xs text-blue-400 hover:underline"
+                      onClick={() => setShowForgotDialog(true)}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                 </div>
                 <Button
                   type="submit"
@@ -280,7 +333,26 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
                 </Button>
               </form>
 
-              <div className="text-center space-y-2">
+              {/* Divider */}
+              <div className="flex items-center my-2">
+                <div className="flex-1 h-px bg-muted-foreground/30" />
+                <span className="mx-2 text-xs text-muted-foreground">OR</span>
+                <div className="flex-1 h-px bg-muted-foreground/30" />
+              </div>
+
+              {/* Google Sign-In Button */}
+              <Button
+                onClick={handleGoogleSignIn}
+                variant="outline"
+                className="w-full border-muted flex items-center justify-center gap-2 font-semibold text-base py-2"
+                disabled={isLoading}
+                type="button"
+              >
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5" />
+                Sign in with Google
+              </Button>
+
+              <div className="text-center space-y-2 mt-4">
                 <Button
                   onClick={handleEmailSignUp}
                   variant="outline"
@@ -293,6 +365,32 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
                   Or sign in with your existing account
                 </p>
               </div>
+
+              {/* Forgot Password Dialog */}
+              <Dialog open={showForgotDialog} onOpenChange={setShowForgotDialog}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reset Password</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <Label htmlFor="forgot-email">Registered Email</Label>
+                    <Input
+                      id="forgot-email"
+                      type="email"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      placeholder="Enter your registered email"
+                      required
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Enter your registered email and we'll send you a password reset link.
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isForgotLoading}>
+                      {isForgotLoading ? 'Sending...' : 'Send Reset Email'}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             <TabsContent value="phone" className="space-y-4">
