@@ -47,7 +47,10 @@ const createMockSupabase = () => {
       signOut: async () => ({ error: null }),
       onAuthStateChange: (callback: any) => ({
         data: { subscription: { unsubscribe: () => {} } }
-      })
+      }),
+      // --- Added for OAuth and password reset support in mock ---
+      signInWithOAuth: async (params: any) => ({ data: { user: null }, error: null }),
+      resetPasswordForEmail: async (email: string) => ({ data: null, error: null }),
     },
     from: (table: string) => ({
       select: (columns?: string) => ({

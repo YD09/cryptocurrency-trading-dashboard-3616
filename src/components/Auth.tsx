@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,24 @@ const Auth = ({ onAuthSuccess }: AuthProps) => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [isForgotLoading, setIsForgotLoading] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Handle OAuth redirect with access_token in URL hash
+    if (window.location.hash.includes('access_token')) {
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      if (access_token && refresh_token) {
+        supabase.auth.setSession({ access_token, refresh_token })
+          .then(({ error }) => {
+            if (!error) {
+              window.location.hash = '';
+              onAuthSuccess();
+            }
+          });
+      }
+    }
+  }, [onAuthSuccess]);
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
