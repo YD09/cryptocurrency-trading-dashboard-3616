@@ -3,12 +3,12 @@ server:
 
 spring:
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tradecrafter}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -21,14 +21,84 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: ${SUPABASE_JWKS_URL}
+          jwk-set-uri: ${SUPABASE_JWKS_URL:}
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+  
+  # Email Configuration
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GMAIL_USERNAME:}
+    password: ${GMAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  
+  # Cache Configuration
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000
 
 springdoc:
   api-docs:
     enabled: true
   swagger-ui:
     enabled: true
+    path: /swagger-ui.html
 
+# Application Specific Configuration
 app:
+  websocket:
+    endpoint: /ws
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  
   market:
-    provider: ${MARKET_PROVIDER:YAHOO}
+    binance:
+      api-url: https://api.binance.com
+      stream-url: wss://stream.binance.com:9443
+    
+    alpha-vantage:
+      api-url: https://www.alphavantage.co
+      api-key: ${ALPHA_VANTAGE_API_KEY:}
+    
+    finnhub:
+      api-url: https://finnhub.io
+      api-key: ${FINNHUB_API_KEY:}
+      websocket-url: wss://ws.finnhub.io
+    
+    polygon:
+      api-url: https://api.polygon.io
+      api-key: ${POLYGON_API_KEY:}
+  
+  trading:
+    paper:
+      initial-balance: ${INITIAL_BALANCE:100000.0}
+      commission-rate: ${COMMISSION_RATE:0.001}
+      slippage-rate: ${SLIPPAGE_RATE:0.0001}
+  
+  pine-script:
+    max-execution-time: ${MAX_EXECUTION_TIME:30000}
+    max-bars: ${MAX_BARS:5000}
+  
+  alerts:
+    max-per-user: ${MAX_ALERTS_PER_USER:100}
+    email:
+      rate-limit: ${EMAIL_RATE_LIMIT:10}
+
+logging:
+  level:
+    com.tradecrafter: DEBUG
+    org.springframework.web.socket: DEBUG
+    org.hibernate.SQL: DEBUG
