@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; max-width: 640px; }
+    .row { display: flex; justify-content: space-between; margin: .5rem 0; }
+    .green { color: #16a34a; }
+    .red { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <h1>Trading Dashboard</h1>
+  <div th:if="${user == null}">
+    <p>You are not logged in.</p>
+    <a href="/oauth2/authorization/google">Login with Google</a>
+  </div>
+  <div th:if="${user != null}">
+    <p>Welcome, <span th:text="${user.fullName}">User</span></p>
+    <div class="card" th:if="${snapshot != null}">
+      <h3>Real-time P&amp;L</h3>
+      <div class="row"><span>Balance</span><span th:text="${#numbers.formatDecimal(snapshot.balance, 1, 'COMMA', 2, 'POINT')}"></span></div>
+      <div class="row"><span>Equity</span><span th:text="${#numbers.formatDecimal(snapshot.equity, 1, 'COMMA', 2, 'POINT')}"></span></div>
+      <div class="row"><span>Unrealized P&amp;L</span>
+        <span th:classappend="${snapshot.pnl >= 0} ? ' green' : ' red'"
+              th:text="${#numbers.formatDecimal(snapshot.pnl, 1, 'COMMA', 2, 'POINT')}"></span>
+      </div>
+    </div>
+    <p style="margin-top: 1rem"><a href="/logout">Logout</a></p>
+  </div>
+</body>
+</html>

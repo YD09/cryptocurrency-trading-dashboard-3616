@@ -23,11 +23,13 @@ public class SecurityConfig {
     http
       .csrf(csrf -> csrf.disable())
       .cors(Customizer.withDefaults())
-      .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
       .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+        .requestMatchers("/", "/login", "/css/**", "/js/**", "/actuator/health", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+        .requestMatchers("/api/**").authenticated()
         .anyRequest().authenticated()
       )
+      .oauth2Login(Customizer.withDefaults())
       .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 
     return http.build();
