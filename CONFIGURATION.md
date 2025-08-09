@@ -89,3 +89,45 @@ For production deployment:
 - Use environment variables for all sensitive data
 - Regularly rotate API keys and passwords
 - Enable 2FA on all service accounts 
+
+## Backend (Spring Boot) Setup
+
+- Create a `.env` by copying `.env.example` and fill in:
+  - `DB_URL`, `DB_USER`, `DB_PASSWORD` from your Supabase database settings
+  - `SUPABASE_JWKS_URL` as `https://<project-ref>.supabase.co/auth/v1/keys`
+  - Frontend vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`
+
+### Run locally
+
+- Backend:
+  - `cd backend && mvn spring-boot:run`
+- Frontend:
+  - `npm install`
+  - `npm run dev`
+
+### Run with Docker Compose
+
+- `docker compose up --build`
+  - Frontend at http://localhost:5173
+  - Backend at http://localhost:8080
+
+### Auth
+
+- Frontend continues to use Supabase Auth (including Google). The backend validates Supabase JWTs via `SUPABASE_JWKS_URL`.
+- Send the Supabase access token in `Authorization: Bearer <token>` to backend endpoints.
+
+### Realtime P&L
+
+- Endpoint `GET /api/portfolio` returns a computed snapshot (balance, equity, pnl)
+- SSE stream at `GET /api/portfolio/stream` pushes updated snapshots every 5 seconds using Yahoo Finance quotes.
+
+### Trading Endpoints
+
+- `GET /api/trades`
+- `POST /api/trades` body:
+```
+{ "symbol": "AAPL", "type": "BUY", "volume": 10 }
+```
+- `POST /api/trades/{id}/close`
+
+Adjust symbols to your market (e.g. `INFY.NS`). 

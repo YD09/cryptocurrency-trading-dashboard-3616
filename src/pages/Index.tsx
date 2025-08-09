@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { LogOut, User as UserIcon } from 'lucide-react';
+import RealtimePnL from '@/components/RealtimePnL';
 
 const Index = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('BINANCE:BTCUSDT');
@@ -139,6 +140,9 @@ const Index = () => {
             </TabsContent>
           </Tabs>
         </div>
+      </div>
+      <div className="mt-4">
+        <RealtimePnL />
       </div>
     </div>
   );
