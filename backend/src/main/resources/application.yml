@@ -1,34 +1,129 @@
-server:
-  port: 8080
-
 spring:
+  application:
+    name: trade-crafter-backend
+  
+  # Database Configuration
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://localhost:5432/trade_crafter
+    username: postgres
+    password: password
+    driver-class-name: org.postgresql.Driver
+  
+  # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     open-in-view: false
-  jackson:
-    serialization:
-      WRITE_DATES_AS_TIMESTAMPS: false
+  
+  # Redis Configuration for caching and WebSocket sessions
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+  
+  # Email Configuration (Gmail SMTP)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GMAIL_USERNAME:your-email@gmail.com}
+    password: ${GMAIL_APP_PASSWORD:your-app-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  
+  # Security Configuration
   security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${SUPABASE_JWKS_URL}
+    jwt:
+      secret: ${JWT_SECRET:your-super-secret-jwt-key-here-make-it-long-and-secure}
+      expiration: 86400000 # 24 hours in milliseconds
 
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Market Data API Configuration
+market:
+  data:
+    # Binance API
+    binance:
+      base-url: https://api.binance.com
+      api-key: ${BINANCE_API_KEY:}
+      secret-key: ${BINANCE_SECRET_KEY:}
+    
+    # Alpha Vantage API
+    alpha-vantage:
+      base-url: https://www.alphavantage.co
+      api-key: ${ALPHA_VANTAGE_API_KEY:}
+    
+    # Polygon.io API
+    polygon:
+      base-url: https://api.polygon.io
+      api-key: ${POLYGON_API_KEY:}
+    
+    # Finnhub API
+    finnhub:
+      base-url: https://finnhub.io/api/v1
+      api-key: ${FINNHUB_API_KEY:}
+
+# Trading Configuration
+trading:
+  paper-trading:
+    default-balance: 10000.0
+    max-leverage: 100
+    slippage: 0.001 # 0.1% default slippage
+  
+  backtesting:
+    max-bars: 1000000
+    default-timeframe: 1h
+
+# Alert Configuration
+alerts:
+  web-push:
+    enabled: true
+    vapid:
+      public-key: ${VAPID_PUBLIC_KEY:}
+      private-key: ${VAPID_PRIVATE_KEY:}
+  
+  email:
+    enabled: true
+    from-address: ${ALERT_EMAIL_FROM:noreply@tradecrafter.com}
+
+# Logging Configuration
+logging:
+  level:
+    com.example.trading: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# OpenAPI Configuration
 springdoc:
   api-docs:
-    enabled: true
+    path: /api-docs
   swagger-ui:
-    enabled: true
-
-app:
-  market:
-    provider: ${MARKET_PROVIDER:YAHOO}
+    path: /swagger-ui.html
+    operations-sorter: method
